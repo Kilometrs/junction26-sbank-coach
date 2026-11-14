@@ -20,7 +20,7 @@ DEMO = {
     "CUST00001": "Stable job, 63, close to target",
     "CUST00007": "Stable job, 49, big safety net",
     "CUST05014": "Irregular income, 23",
-    "CUST00243": "Recently moved, 52, housing cost doubled",
+    "CUST00983": "Just started paying for housing, 48",
     "CUST00394": "Buying a home, 45",
 }
 

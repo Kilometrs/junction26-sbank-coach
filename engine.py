@@ -99,12 +99,15 @@ def _signals(customer_id, table, months, income_by_month):
     if all(s == 0 for s in salaries[-2:]) and any(salaries[:-2]):
         signals.append({"stage": "job_loss", "why": "No salary has arrived in the last two months."})
 
+    # Last six months against the year before. Months without a payment are skipped,
+    # because some people pay housing every other month.
     housing = [-table[m].get("Housing", 0) for m in months]
-    before, after = statistics.median(housing[:RECENT]), statistics.median(housing[-RECENT:])
-    if before == 0 and after > 0:
-        signals.append({"stage": "moving_out", "why": "You recently started paying for housing."})
-    elif before > 0 and after > before * 1.25:
-        signals.append({"stage": "moving_out", "why": f"Your housing cost rose from about €{before:.0f} to €{after:.0f} a month."})
+    earlier = [h for h in housing[-18:-RECENT] if h > 0]
+    recent = [h for h in housing[-RECENT:] if h > 0]
+    if recent and not earlier:
+        signals.append({"stage": "moving_out", "why": "You started paying for housing in the last six months."})
+    elif len(recent) >= 3 and len(earlier) >= 3 and statistics.mean(recent) > statistics.mean(earlier) * 1.3:
+        signals.append({"stage": "moving_out", "why": f"Your housing cost rose from about €{statistics.mean(earlier):.0f} to €{statistics.mean(recent):.0f} a month."})
 
     mortgage = _mortgages().get(customer_id)
     if mortgage:
