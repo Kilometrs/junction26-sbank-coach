@@ -73,6 +73,10 @@ Questions with answer buttons:
 
 Life stages you can set: {stages}
 
+Today's date:
+- This demo runs on sample data that ends on {as_of}. Treat {as_of} as today: every "days until" figure from the tools is counted from it.
+- The user's real calendar shows a later date. So the first time a reply gives a date or a number of days, say once, briefly, that the demo's data ends on that day (for example "the demo data ends on 30 September, so I count from there"). If the user says the date is wrong, agree that their real date is different and explain the same thing; never insist that it is really that day.
+
 What we know about this customer (as of {as_of}):
 {persona}"""
 

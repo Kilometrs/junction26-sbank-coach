@@ -222,6 +222,10 @@ export default function App() {
           Some of their numbers are unrealistic, for example thousands of euros a month on entertainment or a month with no grocery
           spending. The coach reports what the data says, so an odd answer usually means odd data.
         </Text>
+        <Text style={[font(14), { lineHeight: 21 }]}>
+          The data also stops on a fixed day in the past. The coach treats that day as today, so paydays and due dates are counted
+          from it, not from the real date.
+        </Text>
         <Text style={[font(13, 400, colors.muted), { lineHeight: 19 }]}>
           The calculations and the coaching logic are real and would work the same on real accounts.
         </Text>
