@@ -443,6 +443,36 @@ def spender_type(customer_id):
     }
 
 
+def insight(customer_id):
+    """One thing worth telling the customer before they ask, as a ready sentence. Picked by fixed rules, no AI."""
+    import calendar
+
+    p = profile(customer_id)
+    table = _monthly(load(customer_id))
+    months = list(table)
+    last = months[-1]
+    month_name = calendar.month_name[int(last[5:7])]
+    flexible = BUCKETS["flexible"]
+    spent = round(-sum(table[last].get(c, 0) for c in flexible))
+    usual = p["buckets_monthly"]["flexible"]
+    net = p["safety_net"]
+    if usual and abs(spent - usual) / usual >= 0.15:
+        change = round(abs(spent - usual) / usual * 100)
+        # The category that moved the most in the same direction as the total.
+        sign = 1 if spent > usual else -1
+        driver = max(flexible, key=lambda c: sign * (-table[last].get(c, 0) - p["by_category_monthly"][c]))
+        word = "above" if sign > 0 else "below"
+        text = f"Your everyday spending was €{spent} in {month_name}, {change}% {word} your usual €{usual}. The biggest change was in {driver}."
+        kind = "everyday_up" if sign > 0 else "everyday_down"
+    elif net["percent_of_target"] is not None and net["percent_of_target"] < 50:
+        text = f"Your safety net is at {net['percent_of_target']}% of its target: €{p['balance']} of €{net['target_eur']}. Ask me how to build it up."
+        kind = "safety_net_low"
+    else:
+        text = f"Your everyday spending was €{spent} in {month_name}, close to your usual €{usual}."
+        kind = "steady"
+    return {"kind": kind, "text": text}
+
+
 if __name__ == "__main__":
     cid = sys.argv[1] if len(sys.argv) > 1 else "CUST00001"
     print(json.dumps({

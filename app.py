@@ -49,7 +49,8 @@ def life_stages():
 @app.get("/profile/{customer_id}")
 def profile(customer_id: str, life_stage: str | None = None):
     p = engine.profile(customer_id, life_stage)
-    return p | {"safe_to_spend": engine.safe_to_spend(customer_id, life_stage), "persona_text": engine.persona_text(p)}
+    return p | {"safe_to_spend": engine.safe_to_spend(customer_id, life_stage), "persona_text": engine.persona_text(p),
+                "insight": engine.insight(customer_id)["text"]}
 
 
 # Limits that keep a public demo from burning the language-model budget. All can be changed in .env.

@@ -80,7 +80,12 @@ export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, o
         {firstTime ? <Text style={[font(12, 400, colors.muted), s.time]}>Today {clock(firstTime)}</Text> : null}
 
         {messages.length === 0 ? (
-          <CoachBubble text="Hi! I'm your money coach. Ask me whether you can afford something, how much is safe to spend this month, or how to build a safety net." />
+          <CoachBubble
+            text={
+              "Hi! I'm your money coach. Ask me whether you can afford something, how much is safe to spend this month, or how to build a safety net." +
+              (profile?.insight ? `\n\nOne thing I noticed: ${profile.insight}` : '')
+            }
+          />
         ) : null}
 
         {messages.map((m, i) =>

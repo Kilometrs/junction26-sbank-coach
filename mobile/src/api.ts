@@ -28,6 +28,8 @@ export type Profile = {
   safety_net: { months_now: number | null; target_months: number; target_eur: number; missing_eur: number };
   safe_to_spend: SafeToSpend;
   persona_text: string;
+  /** One ready-made observation from the engine, shown when the chat opens. */
+  insight: string;
 };
 
 export type SafeToSpend = {
