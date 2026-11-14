@@ -88,3 +88,6 @@ gcloud run deploy sbank-coach --source . --region europe-north1 --allow-unauthen
 | `CUST00007` | 49, stable, 10 months of safety net | yes |
 | `CUST05014` | 23, irregular income, 0.4 months of safety net | wait |
 | `CUST00983` | 48, started paying for housing a month ago, 5.4 months of safety net | yes |
+
+## License
+MIT, see [LICENSE](LICENSE).
