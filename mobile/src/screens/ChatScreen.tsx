@@ -66,13 +66,13 @@ export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, o
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={font(12, 400, colors.muted)}>
-              Your life stage{stageSource === 'guess' ? ' (a guess)' : stageSource === 'default' ? ' (not set)' : ''}
+              Your situation{stageSource === 'guess' ? ' (a guess)' : stageSource === 'default' ? ' (not set)' : ''}
             </Text>
             <Text style={font(14, 500)}>
               {stage ? `${stage.label} · safety-net goal ${stage.target_months} months` : 'Loading…'}
             </Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Edit life stage" onPress={onEditStage} style={s.edit}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Edit your situation" onPress={onEditStage} style={s.edit}>
             <Text style={font(14, 600, colors.green)}>Edit</Text>
           </Pressable>
         </View>

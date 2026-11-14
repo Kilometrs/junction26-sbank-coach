@@ -134,7 +134,7 @@ export default function App() {
 
       <Sheet visible={picker} title="What's your situation?" onClose={() => setPicker(false)}>
         <Text style={[font(13, 400, colors.muted), { lineHeight: 19 }]}>
-          Your life stage sets how big a safety net the coach aims for.
+          Your situation sets how big a safety net the coach aims for.
         </Text>
         <View style={s.options}>
           {lifeStages &&

@@ -56,7 +56,7 @@ export function ProfileScreen(p: Props) {
         {profile && lifeStages ? (
           <View style={s.group}>
             <Fact
-              label="Life stage"
+              label="Your situation"
               value={lifeStages[profile.life_stage].label}
               tag={p.stageSource === 'user' ? ['confirmed', 'Confirmed by you'] : p.stageSource === 'guess' ? ['guess', 'Guess, please check'] : ['data', 'Default']}
               onEdit={p.onEditStage}
@@ -93,14 +93,14 @@ export function ProfileScreen(p: Props) {
         <View style={s.group}>
           <View style={[s.toggleRow, s.line]}>
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={font(15, 500)}>Detect my life stage</Text>
+              <Text style={font(15, 500)}>Detect my situation</Text>
               <Text style={font(12, 400, colors.muted)}>
                 {p.detection ? 'Guesses from your transactions. You confirm before it counts.' : 'Off. The coach uses a standard 3-month goal.'}
               </Text>
             </View>
             <Pressable
               accessibilityRole="switch"
-              accessibilityLabel="Detect my life stage"
+              accessibilityLabel="Detect my situation"
               accessibilityState={{ checked: p.detection }}
               onPress={p.onToggleDetection}
               style={[s.switch, p.detection ? s.switchOn : s.switchOff]}
