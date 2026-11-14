@@ -216,7 +216,7 @@ function BeforeAfter({ spec }: { spec: BeforeAfterSpec }) {
       <View style={s.rows}>
         <Row label={spec.before.label} value={fmt(spec.before.value, spec.unit)} />
         <Row label={spec.change.label} value={fmt(spec.change.value, spec.unit, 'minus')} strong color={TAKEN} />
-        <Row label={spec.after.label} value={fmt(spec.after.value, spec.unit)} strong color={colors.green} />
+        <Row label={spec.after.label} value={fmt(spec.after.value, spec.unit)} strong color={spec.after.value < 0 ? TAKEN : colors.green} />
       </View>
       {spec.target ? (
         <View style={s.legendItem}>
@@ -255,12 +255,18 @@ function BarChart({ spec }: { spec: BarChartSpec }) {
     ser.values.map<BarDatum>((y, ci) => ({ x: xOf(ci), y, fill: colorOf(si, ci), label: spec.stacked ? '' : fmtShort(y, spec.unit) })),
   );
 
-  // The name column takes at most 40% of the width; longer names are cut with "…" (the full name stays in the
-  // accessibility label). Inter at 10 px is about 6.2 px per character.
+  // The name column takes at most 40% of the width. A longer name wraps onto a second line, and only what still
+  // does not fit is cut with "…" (the full name stays in the accessibility label). Inter at 10 px is about
+  // 6.2 px per character.
   const maxChars = Math.max(4, Math.floor((width * 0.4 - 12) / 6.2));
+  const cut = (l: string) => (l.length > maxChars ? l.slice(0, maxChars - 1).trimEnd() + '…' : l);
   const names = spec.categories.map(shortLabel);
-  const labels = names.map((l) => (l.length > maxChars ? l.slice(0, maxChars - 1).trimEnd() + '…' : l));
-  const longest = Math.max(...labels.map((l) => l.length), 1);
+  const labels = names.map((l) => {
+    if (l.length <= maxChars) return l;
+    const at = l.lastIndexOf(' ', maxChars); // the last space the first line can end on
+    return at > 0 ? `${l.slice(0, at)}\n${cut(l.slice(at + 1))}` : cut(l);
+  });
+  const longest = Math.max(...labels.flatMap((l) => l.split('\n')).map((l) => l.length), 1);
   const pad = { top: 8, bottom: 8, left: 12 + longest * 6.2, right: spec.stacked ? 12 : 52 };
   const slots = n * (grouped ? spec.series.length : 1);
   const height = pad.top + pad.bottom + Math.max(slots * 26, 30) + (grouped ? n * 8 : 0);
