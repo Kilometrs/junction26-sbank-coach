@@ -1,0 +1,11 @@
+# Never in the image or the upload: secrets, the full dataset, local installs and build output.
+.env
+.git
+.venv
+.claude
+.devcontainer
+data
+__pycache__
+**/node_modules
+mobile/.expo
+mobile/dist

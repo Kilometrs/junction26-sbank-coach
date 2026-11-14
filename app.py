@@ -9,9 +9,10 @@ from collections import defaultdict, deque
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import coach
@@ -20,14 +21,13 @@ import engine
 app = FastAPI(title="S-Bank coach")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-DEMO = {
-    "CUST00152": "Student, 21, almost no safety net",
-    "CUST00001": "Stable job, 63, close to target",
-    "CUST00007": "Stable job, 49, big safety net",
-    "CUST05014": "Irregular income, 23",
-    "CUST00983": "Just started paying for housing, 48",
-    "CUST00394": "Buying a home, 45",
-}
+DEMO = engine.DEMO_CUSTOMERS
+
+
+def _demo_customer(customer_id):
+    """The API only serves the demo customers: nobody can ask for another id, or for a path dressed up as one."""
+    if customer_id not in DEMO:
+        raise HTTPException(404, "Unknown customer. GET /customers lists the demo customers.")
 
 
 class ChatIn(BaseModel):
@@ -48,6 +48,7 @@ def life_stages():
 
 @app.get("/profile/{customer_id}")
 def profile(customer_id: str, life_stage: str | None = None):
+    _demo_customer(customer_id)
     p = engine.profile(customer_id, life_stage)
     return p | {"safe_to_spend": engine.safe_to_spend(customer_id, life_stage), "persona_text": engine.persona_text(p),
                 "insight": engine.insight(customer_id)["text"]}
@@ -82,6 +83,7 @@ def _visitor(request):
 
 @app.post("/chat")
 def chat(body: ChatIn, request: Request):
+    _demo_customer(body.customer_id)
     messages = [m for m in body.messages if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)]
     if not messages or messages[-1]["role"] != "user":
         return _refuse(body, "I didn't get a question. Could you send it again?", "bad_request")
@@ -109,6 +111,15 @@ def chat(body: ChatIn, request: Request):
     return out
 
 
-@app.get("/")
+@app.get("/debug")
 def debug_page():
     return FileResponse(Path(__file__).parent / "debug.html")
+
+
+# The phone app built for the browser (the Dockerfile puts it in web/). When it is there, the server shows it
+# at /, so one address serves the app and its API. Without it, / is the debug page as before.
+WEB = Path(__file__).parent / "web"
+if WEB.is_dir():
+    app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
+else:
+    app.get("/")(debug_page)

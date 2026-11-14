@@ -13,6 +13,16 @@ from pathlib import Path
 
 DATA = Path(__file__).parent / "data"
 
+# The customers the demo offers. prep.py --demo packs just their data for the hosted demo.
+DEMO_CUSTOMERS = {
+    "CUST00152": "Student, 21, almost no safety net",
+    "CUST00001": "Stable job, 63, close to target",
+    "CUST00007": "Stable job, 49, big safety net",
+    "CUST05014": "Irregular income, 23",
+    "CUST00983": "Just started paying for housing, 48",
+    "CUST00394": "Buying a home, 45",
+}
+
 # S-Bank's three categories, plus what is not spending at all.
 BUCKETS = {
     "fixed": ["Housing", "Utilities", "Groceries", "Transportation"],  # mandatory and regular

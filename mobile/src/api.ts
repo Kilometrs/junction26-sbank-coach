@@ -3,8 +3,10 @@ import { Platform } from 'react-native';
 
 // Web and iOS simulator reach the laptop on localhost, the Android emulator on 10.0.2.2.
 // On a real phone set EXPO_PUBLIC_API_URL=http://<your laptop's LAN IP>:8000 and run uvicorn with --host 0.0.0.0.
+// EXPO_PUBLIC_API_URL=same-origin is for the hosted build, where the API serves the app: it then calls its own address.
+const configured = process.env.EXPO_PUBLIC_API_URL;
 export const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000');
+  configured === 'same-origin' ? '' : (configured ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000'));
 
 export type Customer = { id: string; label: string };
 export type LifeStages = Record<string, { label: string; target_months: number }>;

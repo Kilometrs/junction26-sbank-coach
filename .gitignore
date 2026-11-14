@@ -5,6 +5,8 @@
 # S-Bank dataset (346 MB, lives outside the repo)
 data/
 *.csv
+# Demo subset made by `python prep.py --demo`; committed only on the prod-demo branch
+demo-data/
 
 # Python
 __pycache__/
