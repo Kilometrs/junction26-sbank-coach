@@ -115,6 +115,15 @@ def _signals(customer_id, table, months, income_by_month):
     return signals
 
 
+def _fullness(balance, target_eur, mandatory):
+    """How full the safety net is with this balance: percent of its target and whole months of must-pay costs.
+    An overdrawn account counts as empty."""
+    return {
+        "percent_of_target": max(0, round(balance / target_eur * 100)) if target_eur else None,
+        "full_months_covered": max(0, int(balance // mandatory)) if mandatory else None,  # runway in whole months
+    }
+
+
 def profile(customer_id, life_stage=None):
     """Everything the coach and the UI need to know about one customer."""
     rows = load(customer_id)
@@ -123,8 +132,9 @@ def profile(customer_id, life_stage=None):
     recent = months[-RECENT:]
 
     income_by_month = [sum(table[m].get(c, 0) for c in INCOME) for m in months]
-    buckets = {b: round(_avg(table, recent, cats)) for b, cats in BUCKETS.items()}
     by_category = {c: round(_avg(table, recent, [c])) for c in BUCKET_OF}
+    # Each group's total is the sum of its rounded categories, so a list always adds up to its total.
+    buckets = {b: sum(by_category[c] for c in cats) for b, cats in BUCKETS.items()}
     mandatory = buckets["fixed"] + buckets["irregular"]
     balance = rows[-1]["balance"]
     signals = _signals(customer_id, table, months, income_by_month)
@@ -156,7 +166,7 @@ def profile(customer_id, life_stage=None):
         "life_stage_signals": signals,
         "safety_net": {
             "months_now": round(balance / mandatory, 1) if mandatory else None,
-            "percent_of_target": round(balance / target * 100) if target else None,
+            **_fullness(round(balance), round(target), mandatory),
             "target_months": target_months,
             "target_eur": round(target),
             "missing_eur": round(max(0, target - balance)),
@@ -170,7 +180,7 @@ def persona_text(p):
     lines = [
         f"Age {p['age']}. Income about €{p['income_monthly']} a month (lowest month in the past year: €{p['income_lowest_month']}).",
         f"Monthly spending: €{b['fixed']} mandatory and regular, €{b['irregular']} mandatory but irregular, €{b['flexible']} everyday spending that slips away.",
-        f"Account balance €{p['balance']}, which is {net['percent_of_target']}% of the safety-net target for this life stage: {net['target_months']} months of must-pay costs (€{net['target_eur']}).",
+        f"Account balance €{p['balance']}, which is {net['percent_of_target']}% of the safety-net target for this life stage: {net['target_months']} months of must-pay costs (€{net['target_eur']}). It covers {net['full_months_covered']} full months of must-pay costs.",
         f"Already puts aside about €{p['saving_monthly']} a month." if p["saving_monthly"] else "No regular saving visible.",
         f"Life stage: {LIFE_STAGES[p['life_stage']]['label']} ({'confirmed by the user' if p['life_stage_confirmed'] else 'a guess, NOT yet confirmed by the user'}).",
     ]
@@ -233,6 +243,7 @@ def can_i_afford(customer_id, amount, life_stage=None):
     net = p["safety_net"]
     mandatory = p["mandatory_monthly"]
     after = p["balance"] - amount
+    left = _fullness(after, net["target_eur"], mandatory)  # the same sums as for today's balance
     monthly_surplus = p["income_monthly"] - mandatory - p["buckets_monthly"]["flexible"]
 
     if after >= net["target_eur"]:
@@ -250,7 +261,9 @@ def can_i_afford(customer_id, amount, life_stage=None):
         "target_eur": net["target_eur"],
         # How full the safety net is, before and after: easier to picture than "0.3 months".
         "percent_of_target_before": net["percent_of_target"],
-        "percent_of_target_after": max(0, round(after / net["target_eur"] * 100)) if net["target_eur"] else None,
+        "percent_of_target_after": left["percent_of_target"],
+        "full_months_covered_before": net["full_months_covered"],
+        "full_months_covered_after": left["full_months_covered"],
         "target_months": net["target_months"],
         "monthly_surplus": round(monthly_surplus),
         "months_to_save_up": round(amount / monthly_surplus, 1) if monthly_surplus > 0 else None,

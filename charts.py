@@ -209,8 +209,9 @@ def validate_chart(kind, spec, data_numbers, text_numbers):
             _need(isinstance(part, dict), f"before_after needs {key} with a label and a value.")
             out[key] = {"label": str(part.get("label", "")), "value": value(part.get("value"), key)}
             texts.append(out[key]["label"])
-        _need(abs(out["after"]["value"]) <= abs(out["before"]["value"]) or out["after"]["value"] < 0,
-              "after must be what is left of before once the change is taken out.")
+        gap = out["before"]["value"] - abs(out["change"]["value"]) - out["after"]["value"]
+        _need(abs(gap) <= 1, "after must be before minus change (a negative amount keeps its minus sign). "
+              "Use the three values from one tool result.")
 
     elif kind == "key_figures":
         rows = spec.get("rows") or []
