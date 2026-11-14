@@ -6,7 +6,7 @@ import { ReactNode } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { VictoryAxis, VictoryBar, VictoryChart, VictoryGroup, VictoryLabel, VictoryLine, VictoryScatter, VictoryStack } from 'victory-native';
 
-import { BarChartSpec, ChartSpec, KeyFiguresSpec, LineChartSpec, ProgressSpec, Unit } from '../api';
+import { BarChartSpec, BeforeAfterSpec, ChartSpec, KeyFiguresSpec, LineChartSpec, ProgressSpec, Unit } from '../api';
 import { colors, eur, font, months, monthsShort, PHONE_MAX_WIDTH } from '../theme';
 
 export type Part = { kind: 'text'; text: string } | { kind: 'chart'; spec: ChartSpec };
@@ -75,6 +75,8 @@ export function Chart({ spec }: { spec: ChartSpec }) {
       return <LineChart spec={spec} />;
     case 'progress':
       return <Progress spec={spec} />;
+    case 'before_after':
+      return <BeforeAfter spec={spec} />;
     case 'key_figures':
       return <KeyFigures spec={spec} />;
     default:
@@ -180,6 +182,46 @@ function Progress({ spec }: { spec: ProgressSpec }) {
         <View style={s.legendItem}>
           <View style={{ width: 2, height: 12, backgroundColor: colors.heading }} />
           <Text style={font(12, 400, colors.muted)}>
+            {spec.target.label} · <Text style={font(12, 600)}>{fmt(spec.target.value, spec.unit)}</Text>
+          </Text>
+        </View>
+      ) : null}
+    </Panel>
+  );
+}
+
+// ---- before and after ------------------------------------------------------------------------------------------
+
+/** The part of the bar a one-off cost takes away. */
+const TAKEN = '#E0796B';
+
+function BeforeAfter({ spec }: { spec: BeforeAfterSpec }) {
+  const before = Math.max(0, spec.before.value);
+  const after = Math.max(0, Math.min(before, spec.after.value));
+  // A little room past the largest value, so a target at the top still shows as a mark.
+  const scale = Math.max(spec.target?.value ?? 0, before, 1e-9) * 1.08;
+  const pct = (v: number) => `${Math.max(0, Math.min(100, (v / scale) * 100))}%` as const;
+  return (
+    <Panel title={spec.title} badge={spec.badge} note={spec.note}>
+      <View
+        style={s.gauge}
+        accessible
+        accessibilityLabel={`${spec.before.label}: ${fmt(spec.before.value, spec.unit)}. ${spec.change.label}: ${fmt(spec.change.value, spec.unit, 'minus')}. ${spec.after.label}: ${fmt(spec.after.value, spec.unit)}.`}
+      >
+        {/* The whole amount in the "taken" colour, then what stays drawn over it: the gap between them is the cost. */}
+        <View style={[s.gaugeFill, { width: pct(before), backgroundColor: TAKEN }]} />
+        <View style={[s.gaugeFill, { width: pct(after), backgroundColor: colors.green, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]} />
+        {spec.target ? <View style={[s.gaugeTarget, { left: pct(spec.target.value) }]} /> : null}
+      </View>
+      <View style={s.rows}>
+        <Row label={spec.before.label} value={fmt(spec.before.value, spec.unit)} />
+        <Row label={spec.change.label} value={fmt(spec.change.value, spec.unit, 'minus')} strong color={TAKEN} />
+        <Row label={spec.after.label} value={fmt(spec.after.value, spec.unit)} strong color={colors.green} />
+      </View>
+      {spec.target ? (
+        <View style={s.legendItem}>
+          <View style={{ width: 2, height: 12, backgroundColor: colors.heading }} />
+          <Text style={[font(12, 400, colors.muted), s.shrink]}>
             {spec.target.label} · <Text style={font(12, 600)}>{fmt(spec.target.value, spec.unit)}</Text>
           </Text>
         </View>

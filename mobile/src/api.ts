@@ -68,13 +68,23 @@ export type ProgressSpec = ChartBase & {
   target?: { label: string; value: number };
   badge?: string;
 };
+/** What a one-off cost takes out of an amount: one bar with the part that stays and the part that goes. */
+export type BeforeAfterSpec = ChartBase & {
+  type: 'before_after';
+  unit: Unit;
+  before: { label: string; value: number };
+  change: { label: string; value: number };
+  after: { label: string; value: number };
+  target?: { label: string; value: number };
+  badge?: string;
+};
 export type KeyFiguresSpec = ChartBase & {
   type: 'key_figures';
   headline?: { label: string; value: number; unit: Unit };
   rows: { label: string; value: number; unit: Unit; sign?: 'plus' | 'minus' }[];
   badge?: string;
 };
-export type ChartSpec = BarChartSpec | LineChartSpec | ProgressSpec | KeyFiguresSpec;
+export type ChartSpec = BarChartSpec | LineChartSpec | ProgressSpec | BeforeAfterSpec | KeyFiguresSpec;
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 /**
