@@ -252,7 +252,9 @@ def what_if_cut(customer_id, category, percent, life_stage=None):
 
     return {
         "category": category,
+        "percent": percent,
         "saved_monthly": round(saved),
+        "missing_eur": missing,  # the safety-net gap both paces fill
         "months_to_target_now": months_to_target(surplus),
         "months_to_target_after": months_to_target(surplus + saved),
     }
@@ -273,6 +275,8 @@ def goal_plan(customer_id, amount, months, life_stage=None):
         verdict = "on_track"
     else:
         verdict = "tight"  # needs spending cuts or more time
+    goal_months = round(amount / surplus, 1) if surplus > 0 else None
+    net_months = round(missing / surplus, 1) if missing and surplus > 0 else (0 if not missing else None)
     return {
         "amount": amount,
         "months": months,
@@ -281,9 +285,11 @@ def goal_plan(customer_id, amount, months, life_stage=None):
         "monthly_surplus": round(surplus),
         "shortfall_monthly": round(shortfall),
         "cut_flexible_percent_to_close_gap": round(shortfall / flexible * 100) if shortfall and flexible else 0,
-        "months_at_current_surplus": round(amount / surplus, 1) if surplus > 0 else None,
+        "months_at_current_surplus": goal_months,
         "safety_net_missing_eur": missing,
-        "months_to_fill_safety_net_first": round(missing / surplus, 1) if missing and surplus > 0 else (0 if not missing else None),
+        "months_to_fill_safety_net_first": net_months,
+        # Safety net first, then the goal, both from everything left over each month.
+        "goal_ready_after_months": round(net_months + goal_months, 1) if net_months is not None and goal_months is not None else None,
     }
 
 

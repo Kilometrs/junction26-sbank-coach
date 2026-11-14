@@ -14,6 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import APIError, OpenAI
 
+import charts
 import engine
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -21,16 +22,21 @@ MODELS = os.environ.get("LLM_MODEL", "gemini-3.5-flash,gemini-3.5-flash-lite,gem
 client = OpenAI(
     api_key=os.environ.get("LLM_API_KEY") or os.environ.get("GEMINI_API_KEY"),
     base_url=os.environ.get("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    timeout=20,
-    max_retries=0,
+    # Gemini sometimes times out, rate-limits (429) or is overloaded (5xx). The client retries such a call once,
+    # after a short pause (longer when Gemini says how long to wait); if that fails too, the next model takes over.
+    timeout=30,
+    max_retries=1,
 )
 
 
-def _complete(convo):
-    """Ask the first model that answers. A model over quota or timing out moves to the back of the queue."""
+def _complete(convo, answer_now=False):
+    """Ask the first model that answers. A model that still fails after its retry moves to the back of the queue.
+
+    answer_now: no more tool calls, the model has to write its reply."""
     for model in list(MODELS):
         try:
-            return client.chat.completions.create(model=model.strip(), messages=convo, tools=TOOL_SPECS).choices[0].message
+            return client.chat.completions.create(model=model.strip(), messages=convo, tools=TOOL_SPECS,
+                                                  tool_choice="none" if answer_now else "auto").choices[0].message
         except APIError as e:
             print(f"[coach] {model}: {type(e).__name__}", file=sys.stderr)
             MODELS.append(MODELS.pop(MODELS.index(model)))
@@ -51,6 +57,12 @@ How you work:
 - Explain, don't lecture. Be warm, concrete and brief: two to four short sentences, plain words, no jargon. Suggest one small next step when it fits.
 - You give education, not investment advice. Never recommend specific financial products.
 - Answer in the language the user writes in.
+
+{charts}
+
+Questions with answer buttons:
+- When you ask the user something with a few clear answers (yes or no, confirming a life-stage guess, picking one of a few options), call ask_with_options with 2 to 4 short answers. Write them in the user's language, the way the user would say them, for example "Yes, I'm a student" and "No, something else".
+- The app shows them as buttons under your reply, and the user can still type something else. End your reply with the question itself, and ask at most one such question per reply. Call it in the same step as your charts.
 
 Life stages you can set: {stages}
 
@@ -92,12 +104,57 @@ TOOL_SPECS = [
     {"type": "function", "function": {"name": name, "description": desc,
                                       "parameters": {"type": "object", "properties": props, "required": list(props)}}}
     for name, desc, props in TOOLS
-]
+] + charts.CHART_SPECS
+
+ASK = "ask_with_options"
+TOOL_SPECS.append({"type": "function", "function": {
+    "name": ASK,
+    "description": "Show the user buttons with answers to the question you end your reply with, for example yes and no.",
+    "parameters": {"type": "object", "properties": {"options": {
+        "type": "array", "items": {"type": "string"},
+        "description": "2 to 4 short answers in the user's language, written as the user would say them",
+    }}, "required": ["options"]},
+}})
+
+
+def answer_options(args):
+    """The answers to show as buttons: 2-4 different, short ones. Raises ValueError saying what to fix."""
+    options, seen = [], set()
+    for o in args.get("options") or []:
+        text = " ".join(str(o).split())
+        if text and text.lower() not in seen:
+            seen.add(text.lower())
+            options.append(text)
+    if not 2 <= len(options) <= 4:
+        raise ValueError("Give 2 to 4 different answers.")
+    if too_long := [o for o in options if len(o) > 40]:
+        raise ValueError(f"Keep each answer under 40 characters: {too_long}")
+    return options
+
+
+HISTORY = 10  # messages sent to the model; older ones are left out to keep each call small
+
+
+def recent(messages):
+    """The last HISTORY messages, starting with one of the user's."""
+    kept = messages[-HISTORY:]
+    while kept and kept[0]["role"] != "user":
+        kept = kept[1:]
+    return kept or messages[-1:]
 
 
 def chat(customer_id, messages, life_stage=None):
-    """messages: [{"role": "user"|"assistant", "content": str}, ...]. Returns reply, cards and life stage."""
-    cards = []
+    """messages: [{"role": "user"|"assistant", "content": str}, ...]. Returns reply, cards, charts and life stage.
+
+    cards are the engine calls behind the reply ({tool, args, result}). charts are the charts the coach drew,
+    by id; the reply has a [[chart:id]] line where each one goes. options are answers to the question the reply
+    ends with, for the app to show as buttons (empty when there is none)."""
+    cards, drawn, options = [], {}, []
+
+    def ask(args):
+        nonlocal options
+        options = answer_options(args)  # a second call replaces the first: one question per reply
+        return {"shown": options, "next": "End your reply with the question these answer."}
 
     def run(name, args):
         nonlocal life_stage
@@ -109,30 +166,67 @@ def chat(customer_id, messages, life_stage=None):
         return getattr(engine, name)(customer_id, **args, life_stage=life_stage)
 
     p = engine.profile(customer_id, life_stage)
+    persona = engine.persona_text(p)
     system = SYSTEM.format(
+        charts=charts.PROMPT,
         stages=", ".join(f"{k} ({v['label']}, {v['target_months']} months)" for k, v in engine.LIFE_STAGES.items()),
         as_of=p["as_of"],
-        persona=engine.persona_text(p),
+        persona=persona,
     )
-    convo = [{"role": "system", "content": system}, *messages]
+    convo = [{"role": "system", "content": system}, *recent(messages)]
 
-    for _ in range(6):  # tool rounds
-        msg = _complete(convo)
+    def draw(name, args):
+        """Check a chart call against the numbers the engine gave in this reply, and keep it."""
+        results = [p, persona] + [c["result"] for c in cards if not (isinstance(c["result"], dict) and "error" in c["result"])]
+        data = charts.allowed_numbers(*results)
+        spec = charts.validate_chart(name, args, data, data | charts.allowed_numbers(*(c["args"] for c in cards)))
+        cid = f"c{len(drawn) + 1}"
+        drawn[cid] = spec
+        return {"chart_id": cid, "place_it_with": f"[[chart:{cid}]]"}
+
+    said = []  # text the model wrote alongside its tool calls: the answer if the last message has none
+    rounds = 8  # tool rounds; chart and question calls count too
+    for i in range(rounds):
+        msg = _complete(convo, answer_now=i == rounds - 1)
         if msg is None:
             return {"reply": "The coach can't reach its language model right now. Please try again in a moment.",
-                    "cards": cards, "life_stage": life_stage, "error": "llm_unavailable"}
-        if not msg.tool_calls:
-            return {"reply": msg.content, "cards": cards, "life_stage": life_stage}
+                    "cards": cards, "charts": {}, "options": [], "life_stage": life_stage, "error": "llm_unavailable"}
+        if not msg.tool_calls or i == rounds - 1:
+            reply = msg.content or ""
+            if not charts.MARKER.sub("", reply).strip():  # the answer came with the tool calls, only markers at the end
+                reply = "\n\n".join(t for t in [*said, reply] if t.strip())
+            return {"reply": charts.place_charts(reply, drawn), "cards": cards, "charts": drawn, "options": options,
+                    "life_stage": life_stage}
+        if msg.content and msg.content.strip():
+            said.append(msg.content)
         convo.append(msg.model_dump(exclude_none=True))
+        needs_data = False  # an engine call or a rejected chart this step: the model must see the results
         for call in msg.tool_calls:
-            args = json.loads(call.function.arguments or "{}")
+            name, args = call.function.name, {}
             try:
-                result = run(call.function.name, args)
+                args = json.loads(call.function.arguments or "{}")
+                if name in charts.CHART_NAMES:
+                    result = draw(name, args)
+                elif name == ASK:
+                    result = ask(args)
+                else:
+                    result = run(name, args)
             except Exception as e:  # bad arguments from the model: let it retry
                 result = {"error": str(e)}
-            cards.append({"tool": call.function.name, "args": args, "result": result})
+            if name not in charts.CHART_NAMES and name != ASK:
+                cards.append({"tool": name, "args": args, "result": result})
+                needs_data = True
+            elif "error" in result:
+                print(f"[coach] {name} rejected: {result['error']}", file=sys.stderr)
+                needs_data = True  # let the model fix it
             convo.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
-    return {"reply": "Sorry, I got stuck on that one. Could you ask it another way?", "cards": cards, "life_stage": life_stage}
+        # The answer came together with its charts and question, and they were all accepted: done, no extra call.
+        text = msg.content or ""
+        if not needs_data and charts.MARKER.sub("", text).strip():
+            return {"reply": charts.place_charts(text, drawn), "cards": cards, "charts": drawn, "options": options,
+                    "life_stage": life_stage}
+    return {"reply": "Sorry, I got stuck on that one. Could you ask it another way?", "cards": cards, "charts": {}, "options": [],
+            "life_stage": life_stage}
 
 
 if __name__ == "__main__":
