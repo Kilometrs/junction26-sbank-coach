@@ -83,8 +83,38 @@ export function CoachAvatar() {
   );
 }
 
-/** Renders **bold** spans, which the language model likes to use. */
+/** Coach text: **bold** spans, and lines starting with "- " as a bulleted list. */
 export function Rich({ text, style }: { text: string; style: object }) {
+  // Group the lines into paragraphs and list items, keeping their order.
+  const blocks: { item: boolean; text: string }[] = [];
+  for (const line of text.split('\n')) {
+    const item = /^\s*[-•*]\s+/.test(line);
+    const last = blocks[blocks.length - 1];
+    if (item) blocks.push({ item: true, text: line.replace(/^\s*[-•*]\s+/, '') });
+    else if (last && !last.item) last.text += '\n' + line;
+    else blocks.push({ item: false, text: line });
+  }
+  const shown = blocks.map((b) => ({ ...b, text: b.item ? b.text : b.text.replace(/^\n+|\n+$/g, '') })).filter((b) => b.text.trim());
+  if (!shown.some((b) => b.item)) return <Inline text={text} style={style} />;
+  return (
+    <View style={{ gap: 6 }}>
+      {shown.map((b, i) =>
+        b.item ? (
+          <View key={i} style={{ flexDirection: 'row', gap: 8, paddingLeft: 4 }}>
+            <Text style={style}>•</Text>
+            <View style={{ flex: 1 }}>
+              <Inline text={b.text} style={style} />
+            </View>
+          </View>
+        ) : (
+          <Inline key={i} text={b.text} style={style} />
+        ),
+      )}
+    </View>
+  );
+}
+
+function Inline({ text, style }: { text: string; style: object }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
     <Text style={style}>
