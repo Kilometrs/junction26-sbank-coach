@@ -141,6 +141,11 @@ def answer_options(args):
 _STRAY_TAG = re.compile(r"\[\[(?!chart:)[^\]\n]*\]\]")
 
 
+def has_text(reply):
+    """True when a reply says something once chart markers and leftover [[tags]] are taken out."""
+    return bool(_STRAY_TAG.sub("", charts.MARKER.sub("", reply or "")).strip())
+
+
 def finish(reply, drawn):
     """The reply as the app shows it: no leftover [[tags]], and its chart markers tidied."""
     return charts.place_charts(_STRAY_TAG.sub("", reply or ""), drawn)
@@ -207,7 +212,7 @@ def chat(customer_id, messages, life_stage=None):
                     "cards": cards, "charts": {}, "options": [], "life_stage": life_stage, "error": "llm_unavailable"}
         if not msg.tool_calls or i == rounds - 1:
             reply = msg.content or ""
-            if not charts.MARKER.sub("", reply).strip():  # the answer came with the tool calls, only markers at the end
+            if not has_text(reply):  # the answer came with the tool calls, only markers at the end
                 reply = "\n\n".join(t for t in [*said, reply] if t.strip())
             return {"reply": finish(reply, drawn), "cards": cards, "charts": drawn, "options": options,
                     "life_stage": life_stage}
@@ -236,7 +241,7 @@ def chat(customer_id, messages, life_stage=None):
             convo.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)})
         # The answer came together with its charts and question, and they were all accepted: done, no extra call.
         text = msg.content or ""
-        if not needs_data and charts.MARKER.sub("", text).strip():
+        if not needs_data and has_text(text):
             return {"reply": finish(text, drawn), "cards": cards, "charts": drawn, "options": options,
                     "life_stage": life_stage}
     return {"reply": "Sorry, I got stuck on that one. Could you ask it another way?", "cards": cards, "charts": {}, "options": [],
