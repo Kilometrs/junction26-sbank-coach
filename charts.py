@@ -64,6 +64,7 @@ PROMPT = """Charts:
   - trend: bar_chart with one bar per month, highlight = highest_month.
   - compare_to_peers: bar_chart with two categories, the customer and a typical peer; put who the peers are in note.
   - spending: key_figures with total and usual_per_month.
+  - spender_type: bar_chart in percent with one bar per kind of spending (share_percent), highlight = the largest. Name the type in plain words and explain it with the three kinds of spending.
   - profile, when the user asks where their money goes or for a list of their spending: bar_chart in eur with one bar per kind of spending (the three totals in by_bucket_monthly), highlight = the largest, placed before the list of categories.
 - Write titles and labels in the same language as your reply. Draw a chart when your answer rests on a tool result, at most two per answer, and let your sentence point at the chart instead of repeating all of its numbers."""
 

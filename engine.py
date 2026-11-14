@@ -399,6 +399,50 @@ def trend(customer_id, what, months=6):
     }
 
 
+SPENDER_TYPES = {
+    "steady_saver": "Steady saver: money is put aside regularly and everyday spending stays modest.",
+    "everyday_spender": "Everyday spender: the largest share goes to everyday spending that slips away.",
+    "surprise_bill_payer": "Surprise-bill payer: irregular must-pay costs take an unusually large share.",
+    "fixed_cost_heavy": "Fixed-cost heavy: most of the money is tied up in regular bills, leaving little room to adjust.",
+    "balanced": "Balanced: no single kind of spending dominates.",
+}
+
+
+def spender_type(customer_id):
+    """What kind of spender the customer is, from the three kinds of spending. The type is picked by fixed rules."""
+    p = profile(customer_id)
+    b = p["buckets_monthly"]
+    total = sum(b.values())
+    if not total:
+        return {"error": "No spending found for this customer."}
+    share = {k: round(v / total * 100) for k, v in b.items()}
+    saves = p["income_monthly"] and p["saving_monthly"] >= 0.1 * p["income_monthly"]
+    if saves and share["flexible"] < 35:
+        kind = "steady_saver"
+    elif share["flexible"] >= 40:
+        kind = "everyday_spender"
+    elif share["irregular"] >= 25:
+        kind = "surprise_bill_payer"
+    elif share["fixed"] >= 60:
+        kind = "fixed_cost_heavy"
+    else:
+        kind = "balanced"
+    everyday = p["by_bucket_monthly"]["flexible"]["categories"]
+    top = next(iter(everyday))
+    t = trend(customer_id, "flexible", RECENT)
+    return {
+        "type": kind,
+        "meaning": SPENDER_TYPES[kind],
+        "share_percent": share,  # of all spending, average of the last 6 months
+        "monthly_eur": b,
+        "biggest_everyday_category": top,
+        "biggest_everyday_monthly": everyday[top],
+        "everyday_trend": t["direction"],
+        "everyday_change_percent": t["change_percent"],
+        "saving_monthly": p["saving_monthly"],
+    }
+
+
 if __name__ == "__main__":
     cid = sys.argv[1] if len(sys.argv) > 1 else "CUST00001"
     print(json.dumps({

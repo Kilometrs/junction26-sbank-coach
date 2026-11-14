@@ -101,11 +101,12 @@ TOOLS = [
         "what": {"type": "string", "description": "A category, a bucket (fixed, irregular, flexible) or 'all'"},
         "months": {"type": "integer", "description": "How many months to look at, usually 6"},
     }),
+    ("spender_type", "What kind of spender the customer is: the share of each kind of spending, the biggest everyday category and its trend.", {}),
     ("set_life_stage", "Record the life stage after the user confirmed it or told you their situation.", {
         "stage": {"type": "string", "enum": list(engine.LIFE_STAGES)},
     }),
 ]
-STAGE_FREE = {"spending", "compare_to_peers", "upcoming_bills", "trend"}  # same answer for every life stage
+STAGE_FREE = {"spending", "compare_to_peers", "upcoming_bills", "trend", "spender_type"}  # same answer for every life stage
 TOOL_SPECS = [
     {"type": "function", "function": {"name": name, "description": desc,
                                       "parameters": {"type": "object", "properties": props, "required": list(props)}}}
