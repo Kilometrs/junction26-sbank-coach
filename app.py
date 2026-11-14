@@ -103,7 +103,10 @@ def chat(body: ChatIn, request: Request):
         _today["count"] += 1
 
     messages = [{"role": m["role"], "content": m["content"][:MAX_HISTORY_TEXT]} for m in messages]
-    return coach.chat(body.customer_id, messages, body.life_stage)
+    out = coach.chat(body.customer_id, messages, body.life_stage)
+    # For the app's simulated "start saving in S-mobiili" button: an amount the engine worked out, or None.
+    out["saving_offer"] = None if out.get("error") else engine.saving_offer(out["cards"])
+    return out
 
 
 @app.get("/")

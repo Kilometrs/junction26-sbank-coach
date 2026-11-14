@@ -473,6 +473,26 @@ def insight(customer_id):
     return {"kind": kind, "text": text}
 
 
+def saving_offer(cards):
+    """A monthly amount worth offering as a standing transfer, taken from the engine results behind a reply
+    ([{tool, result}, ...]). None when the answer was not about putting money aside."""
+    for card in reversed(cards):
+        r = card.get("result")
+        if not isinstance(r, dict) or "error" in r:
+            continue
+        if card["tool"] == "goal_plan":
+            if r["verdict"] == "on_track":
+                return {"amount": r["needed_monthly"], "purpose": "goal"}
+            if r["monthly_surplus"] > 0:  # not enough for the plan: offer what is left over each month
+                return {"amount": min(r["needed_monthly"], r["monthly_surplus"]),
+                        "purpose": "safety_net" if r["verdict"] == "safety_net_first" else "goal"}
+        elif card["tool"] == "what_if_cut" and r["saved_monthly"] > 0:
+            return {"amount": r["saved_monthly"], "purpose": "safety_net" if r["missing_eur"] else "savings"}
+        elif card["tool"] == "safe_to_spend" and r["safety_net_contribution"] > 0:
+            return {"amount": r["safety_net_contribution"], "purpose": "safety_net"}
+    return None
+
+
 if __name__ == "__main__":
     cid = sys.argv[1] if len(sys.argv) > 1 else "CUST00001"
     print(json.dumps({

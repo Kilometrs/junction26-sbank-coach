@@ -3,13 +3,13 @@ import { ComponentRef, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChartSpec, LifeStages, Profile } from '../api';
+import { ChartSpec, LifeStages, Profile, SavingOffer } from '../api';
 import { Chart, messageParts } from '../components/Visuals';
 import { Cap, Person, Send } from '../components/Icons';
 import { Button, CoachAvatar, Header, IconButton, Rich } from '../components/ui';
-import { colors, font } from '../theme';
+import { colors, eur, font } from '../theme';
 
-export type Message = { role: 'user' | 'assistant'; content: string; charts?: Record<string, ChartSpec>; options?: string[]; time: Date; failed?: boolean };
+export type Message = { role: 'user' | 'assistant'; content: string; charts?: Record<string, ChartSpec>; options?: string[]; savingOffer?: SavingOffer | null; time: Date; failed?: boolean };
 
 type Props = {
   profile: Profile | null;
@@ -21,9 +21,10 @@ type Props = {
   onBack: () => void;
   onOpenProfile: () => void;
   onEditStage: () => void;
+  onStartSaving: (offer: SavingOffer) => void;
 };
 
-export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, onSend, onBack, onOpenProfile, onEditStage }: Props) {
+export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, onSend, onBack, onOpenProfile, onEditStage, onStartSaving }: Props) {
   const [text, setText] = useState('');
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const insets = useSafeAreaInsets();
@@ -94,7 +95,7 @@ export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, o
               <Text style={[font(15, 400, colors.white), { lineHeight: 21 }]}>{m.content}</Text>
             </View>
           ) : (
-            <CoachMessage key={i} content={m.content} charts={m.charts} />
+            <CoachMessage key={i} content={m.content} charts={m.charts} savingOffer={m.savingOffer} onStartSaving={onStartSaving} />
           ),
         )}
 
@@ -135,7 +136,7 @@ export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, o
 }
 
 /** A coach reply: its text, with each [[chart:id]] line replaced by that chart, in one bubble. */
-function CoachMessage({ content, charts }: { content: string; charts?: Record<string, ChartSpec> }) {
+function CoachMessage({ content, charts, savingOffer, onStartSaving }: { content: string; charts?: Record<string, ChartSpec>; savingOffer?: SavingOffer | null; onStartSaving: (offer: SavingOffer) => void }) {
   const parts = messageParts(content, charts);
   const hasVisual = parts.some((p) => p.kind === 'chart');
   return (
@@ -149,6 +150,12 @@ function CoachMessage({ content, charts }: { content: string; charts?: Record<st
             <Chart key={j} spec={p.spec} />
           ),
         )}
+        {savingOffer ? (
+          <View style={{ gap: 4 }}>
+            <Button title={`Start ${eur(savingOffer.amount)}/month in Säästäjä`} onPress={() => onStartSaving(savingOffer)} />
+            <Text style={[font(12, 400, colors.muted), { textAlign: 'center' }]}>Opens S-mobiili · simulated in this demo</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );

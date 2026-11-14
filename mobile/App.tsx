@@ -5,14 +5,14 @@ import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { Customer, LifeStages, Profile, api } from './src/api';
+import { Customer, LifeStages, Profile, SavingOffer, api } from './src/api';
 import { Check } from './src/components/Icons';
 import { withoutMarkers } from './src/components/Visuals';
 import { Button } from './src/components/ui';
 import { ChatScreen, Message } from './src/screens/ChatScreen';
 import { CustomersScreen } from './src/screens/CustomersScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
-import { colors, font, PHONE_MAX_WIDTH } from './src/theme';
+import { colors, eur, font, PHONE_MAX_WIDTH } from './src/theme';
 
 type Screen = 'customers' | 'chat' | 'profile';
 
@@ -30,6 +30,7 @@ export default function App() {
   const [picker, setPicker] = useState(false);
   const [sentSheet, setSentSheet] = useState(false);
   const [dataNote, setDataNote] = useState(true); // shown once, when the app opens
+  const [saving, setSaving] = useState<{ offer: SavingOffer; done: boolean } | null>(null); // the simulated S-mobiili step
 
   // What we send as life_stage: the user's choice, or nothing (engine guesses), or a neutral default when detection is off.
   const stage = userStage ?? (detection ? null : 'stable');
@@ -77,7 +78,7 @@ export default function App() {
           setMessages([...history, { role: 'assistant', content: out.reply, time: new Date(), failed: true }]);
           return;
         }
-        setMessages([...history, { role: 'assistant', content: out.reply, charts: out.charts, options: out.options, time: new Date() }]);
+        setMessages([...history, { role: 'assistant', content: out.reply, charts: out.charts, options: out.options, savingOffer: out.saving_offer, time: new Date() }]);
         if (out.life_stage && out.life_stage !== stage) setUserStage(out.life_stage);
       } catch {
         history[history.length - 1].failed = true;
@@ -112,6 +113,7 @@ export default function App() {
               onBack={() => setScreen('customers')}
               onOpenProfile={() => setScreen('profile')}
               onEditStage={() => setPicker(true)}
+              onStartSaving={(offer) => setSaving({ offer, done: false })}
             />
           ) : (
             <ProfileScreen
@@ -170,6 +172,31 @@ export default function App() {
         <View style={s.sent}>
           <Text style={[font(13), { lineHeight: 20 }]}>{profile?.persona_text ?? 'Loading…'}</Text>
         </View>
+      </Sheet>
+
+      <Sheet visible={!!saving} title="S-mobiili · simulated" onClose={() => setSaving(null)}>
+        {saving && !saving.done ? (
+          <>
+            <Text style={[font(15), { lineHeight: 22 }]}>
+              Set up a monthly transfer of <Text style={font(15, 600)}>{eur(saving.offer.amount)}</Text> to Säästäjä,{' '}
+              {{ goal: 'towards your goal', safety_net: 'to build your safety net', savings: 'as regular savings' }[saving.offer.purpose]}?
+            </Text>
+            <Text style={[font(13, 400, colors.muted), { lineHeight: 19 }]}>
+              In the real app this step opens S-mobiili with the amount filled in, and you confirm it there. Here it is
+              simulated: no money moves.
+            </Text>
+            <Button title="Confirm monthly saving" onPress={() => setSaving({ ...saving, done: true })} />
+          </>
+        ) : saving ? (
+          <>
+            <Text style={[font(15, 600, colors.green), { lineHeight: 22 }]}>
+              Done: {eur(saving.offer.amount)} a month to Säästäjä (simulated).
+            </Text>
+            <Text style={[font(13, 400, colors.muted), { lineHeight: 19 }]}>
+              You could pause or change it in S-mobiili at any time. Nothing was actually set up in this demo.
+            </Text>
+          </>
+        ) : null}
       </Sheet>
 
       <Sheet visible={dataNote} title="This is demo data" onClose={() => setDataNote(false)}>

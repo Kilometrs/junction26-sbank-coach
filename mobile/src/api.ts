@@ -93,7 +93,10 @@ export type ChatMessage = { role: 'user' | 'assistant'; content: string };
  * The reply has a [[chart:id]] line where each of `charts` goes. `options` are answers to the question the reply
  * ends with, shown as buttons (empty when there is none).
  */
+/** A monthly amount from the engine that the app can offer to set aside (the S-mobiili step is simulated). */
+export type SavingOffer = { amount: number; purpose: 'goal' | 'safety_net' | 'savings' };
 export type ChatReply = {
+  saving_offer?: SavingOffer | null;
   reply: string;
   cards: Card[];
   charts: Record<string, ChartSpec>;
