@@ -18,7 +18,12 @@ from pydantic import BaseModel
 import coach
 import engine
 
-app = FastAPI(title="S-Bank coach")
+# The phone app built for the browser (the Dockerfile puts it in web/). When it is there this is the hosted demo:
+# the server shows the app at /, so one address serves the app and its API, and the pages meant for development
+# (the debug page, FastAPI's automatic API pages) are switched off.
+WEB = Path(__file__).parent / "web"
+HOSTED = WEB.is_dir()
+app = FastAPI(title="S-Bank coach", **({"docs_url": None, "redoc_url": None, "openapi_url": None} if HOSTED else {}))
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 DEMO = engine.DEMO_CUSTOMERS
@@ -111,15 +116,10 @@ def chat(body: ChatIn, request: Request):
     return out
 
 
-@app.get("/debug")
-def debug_page():
-    return FileResponse(Path(__file__).parent / "debug.html")
-
-
-# The phone app built for the browser (the Dockerfile puts it in web/). When it is there, the server shows it
-# at /, so one address serves the app and its API. Without it, / is the debug page as before.
-WEB = Path(__file__).parent / "web"
-if WEB.is_dir():
+if HOSTED:
     app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
 else:
-    app.get("/")(debug_page)
+
+    @app.get("/")
+    def debug_page():
+        return FileResponse(Path(__file__).parent / "debug.html")

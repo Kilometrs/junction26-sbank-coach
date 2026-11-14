@@ -63,7 +63,7 @@ The coach draws with five chart tools (`charts.py`): `bar_chart`, `line_chart`, 
 Each model call is capped at 1,500 output tokens (`LLM_MAX_TOKENS`). The counts are kept in memory, so they reset when the server restarts and are per instance.
 
 ## Hosted demo (one container)
-The `Dockerfile` builds one image with the API, the phone app as a website at `/` (the debug page moves to `/debug`) and the data of the six demo customers. That data is `demo-data/` (1.4 MB), made by `python prep.py --demo` and committed only on the `prod-demo` branch.
+The `Dockerfile` builds one image with the API, the phone app as a website at `/` (the debug page and FastAPI's `/docs` are switched off there) and the data of the six demo customers. That data is `demo-data/` (1.4 MB), made by `python prep.py --demo` and committed only on the `prod-demo` branch.
 ```bash
 git checkout prod-demo
 docker build -t sbank-coach .

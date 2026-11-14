@@ -16,6 +16,21 @@ import { colors, eur, font, PHONE_MAX_WIDTH } from './src/theme';
 
 type Screen = 'customers' | 'chat' | 'profile';
 
+// In a phone browser the address bar and the keyboard cover part of the page, and "100% high" still counts the
+// covered part. Keep the app exactly as tall as what is visible, so the message box never ends up underneath.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const fit = () => {
+    const height = `${window.visualViewport?.height ?? window.innerHeight}px`;
+    for (const el of [document.documentElement, document.body, document.getElementById('root')]) {
+      if (el) el.style.height = height;
+    }
+    window.scrollTo(0, 0);
+  };
+  fit();
+  window.visualViewport?.addEventListener('resize', fit);
+  window.addEventListener('resize', fit);
+}
+
 export default function App() {
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
 

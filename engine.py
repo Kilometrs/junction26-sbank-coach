@@ -125,6 +125,13 @@ def _signals(customer_id, table, months, income_by_month):
     return signals
 
 
+def _surplus(p):
+    """What is left of the income each month after all spending. A difference of a few euros is rounding,
+    not money to plan with, so it counts as nothing left (and nothing short)."""
+    left = p["income_monthly"] - p["mandatory_monthly"] - p["buckets_monthly"]["flexible"]
+    return 0 if abs(left) < max(5, 0.01 * p["income_monthly"]) else left
+
+
 def _fullness(balance, target_eur, mandatory):
     """How full the safety net is with this balance: percent of its target and whole months of must-pay costs.
     An overdrawn account counts as empty."""
@@ -254,7 +261,7 @@ def can_i_afford(customer_id, amount, life_stage=None):
     mandatory = p["mandatory_monthly"]
     after = p["balance"] - amount
     left = _fullness(after, net["target_eur"], mandatory)  # the same sums as for today's balance
-    monthly_surplus = p["income_monthly"] - mandatory - p["buckets_monthly"]["flexible"]
+    monthly_surplus = _surplus(p)
 
     if after >= net["target_eur"]:
         verdict = "yes"  # safety net stays full
@@ -284,7 +291,7 @@ def what_if_cut(customer_id, category, percent, life_stage=None):
     """Effect of spending less in one category on reaching the safety-net target."""
     p = profile(customer_id, life_stage)
     saved = p["by_category_monthly"][category] * percent / 100
-    surplus = p["income_monthly"] - p["mandatory_monthly"] - p["buckets_monthly"]["flexible"]
+    surplus = _surplus(p)
     missing = p["safety_net"]["missing_eur"]
 
     def months_to_target(monthly):
@@ -303,7 +310,7 @@ def what_if_cut(customer_id, category, percent, life_stage=None):
 def goal_plan(customer_id, amount, months, life_stage=None):
     """Saving for a goal: how much per month, and whether the safety net should come first."""
     p = profile(customer_id, life_stage)
-    surplus = p["income_monthly"] - p["mandatory_monthly"] - p["buckets_monthly"]["flexible"]
+    surplus = _surplus(p)
     needed = amount / months
     missing = p["safety_net"]["missing_eur"]
     shortfall = max(0, needed - surplus)
