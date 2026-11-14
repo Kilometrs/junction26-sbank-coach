@@ -15,9 +15,21 @@ Uses S-Bank's synthetic dataset, which is not included in this repo. Clone `hack
 
 ## Run
 ```bash
-python prep.py              # once: splits the dataset into data/tx/<customer>.csv.gz
-python engine.py CUST00152  # prints the profile and example answers for one customer
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env                  # then add your API key
+.venv/bin/python prep.py              # once: splits the dataset into data/tx/<customer>.csv.gz
+.venv/bin/python engine.py CUST00152  # numbers only, no AI
+.venv/bin/python coach.py CUST00152   # chat in the terminal
+.venv/bin/uvicorn app:app --reload    # API + debug page on http://localhost:8000
 ```
+
+## API (for the UI)
+| Endpoint | Returns |
+|---|---|
+| `GET /customers` | Demo customers: `[{id, label}]` |
+| `GET /life-stages` | Life stages with label and safety-net target |
+| `GET /profile/{id}?life_stage=` | Numbers for the cards: buckets, safety net, safe-to-spend, written profile |
+| `POST /chat` | Body `{customer_id, messages, life_stage}`. Returns `{reply, cards, life_stage}`. `cards` are the raw engine results behind the reply, so the UI can draw numbers without parsing text. Send `life_stage` back on the next call. |
 
 ## Demo customers
 | Customer | Who | "Can I afford a €600 laptop?" |

@@ -35,6 +35,19 @@ LIFE_STAGES = {
 }
 RECENT = 6  # months used for "what is normal for you right now"
 
+# Card merchant codes in the dataset, so people can ask about "taxis" or "coffee".
+MCC = {
+    "5411": "supermarkets", "5499": "convenience stores", "5422": "butchers", "5451": "dairy shops",
+    "5812": "restaurants", "5814": "fast food and cafes", "5813": "bars",
+    "5541": "fuel", "5542": "fuel (self-service)", "7523": "parking", "4111": "public transport",
+    "4121": "taxis", "7512": "car rental", "4511": "flights", "7011": "hotels", "4722": "travel agencies",
+    "5912": "pharmacies", "8011": "doctors", "8021": "dentists", "8099": "other health services",
+    "7922": "theatre and concerts", "7999": "recreation", "7832": "cinema", "7991": "attractions",
+    "7996": "amusement parks", "5200": "home improvement", "5251": "hardware", "5712": "furniture",
+    "5732": "electronics", "5734": "software", "5941": "sports goods", "5942": "books",
+    "5945": "toys and games", "5651": "clothing", "5691": "clothing (other)", "5999": "other shops",
+}
+
 
 @lru_cache(maxsize=None)
 def _customers():
@@ -137,6 +150,44 @@ def profile(customer_id, life_stage=None):
             "target_eur": round(target),
             "missing_eur": round(max(0, target - balance)),
         },
+    }
+
+
+def persona_text(p):
+    """Short written profile for the coach. The LLM sees this instead of raw transactions."""
+    b, net = p["buckets_monthly"], p["safety_net"]
+    lines = [
+        f"Age {p['age']}. Income about €{p['income_monthly']} a month (lowest month in the past year: €{p['income_lowest_month']}).",
+        f"Monthly spending: €{b['fixed']} mandatory and regular, €{b['irregular']} mandatory but irregular, €{b['flexible']} everyday spending that slips away.",
+        f"Account balance €{p['balance']}, which covers {net['months_now']} months of must-pay costs. Target for this life stage: {net['target_months']} months (€{net['target_eur']}).",
+        f"Already puts aside about €{p['saving_monthly']} a month." if p["saving_monthly"] else "No regular saving visible.",
+        f"Life stage: {LIFE_STAGES[p['life_stage']]['label']} ({'confirmed by the user' if p['life_stage_confirmed'] else 'a guess, NOT yet confirmed by the user'}).",
+    ]
+    lines += [f"Hint ({s['stage']}): {s['why']}" for s in p["life_stage_signals"]]
+    return "\n".join(lines)
+
+
+def spending(customer_id, what, months=1):
+    """Spending on a category ("Restaurants") or a merchant type ("taxis") over the last N months."""
+    rows = load(customer_id)
+    all_months = sorted({r["month"] for r in rows})
+    period = set(all_months[-months:])
+    key = what.strip().lower()
+
+    def matches(r):
+        return r["category"].lower() == key or MCC.get(r["mcc_code"], "").startswith(key)
+
+    hits = [r for r in rows if r["amount"] < 0 and matches(r)]
+    if not hits:
+        return {"error": f"Nothing found for '{what}'.", "categories": list(BUCKET_OF), "merchant_types": sorted(set(MCC.values()))}
+    in_period = [r for r in hits if r["month"] in period]
+    return {
+        "what": what,
+        "period": f"{min(period)} to {max(period)}",
+        "total": round(-sum(r["amount"] for r in in_period)),
+        "purchases": len(in_period),
+        "usual_per_month": round(-sum(r["amount"] for r in hits) / len(all_months)),
+        "bucket": BUCKET_OF.get(hits[0]["category"]),
     }
 
 
