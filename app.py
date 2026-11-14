@@ -3,6 +3,7 @@
 Run:  uvicorn app:app --reload     then open http://localhost:8000 for the debug page.
 """
 import os
+import threading
 import time
 from collections import defaultdict, deque
 from datetime import date
@@ -56,6 +57,10 @@ PER_MINUTE = int(os.environ.get("CHAT_PER_MINUTE", 10))  # messages per visitor 
 DAILY_LIMIT = int(os.environ.get("CHAT_DAILY_LIMIT", 1500))  # messages from everyone per day
 MAX_MESSAGE = int(os.environ.get("CHAT_MAX_MESSAGE", 500))  # characters in the message being sent
 MAX_HISTORY_TEXT = 2000  # characters kept of each earlier message
+# Proxies in front of the server that add the visitor's address to X-Forwarded-For: 0 when visitors connect
+# directly (the header is then ignored, because anyone can write it), 1 on Cloud Run.
+PROXY_HOPS = int(os.environ.get("CHAT_PROXY_HOPS", 0))
+_lock = threading.Lock()  # handlers run in a thread pool
 _recent = defaultdict(deque)  # visitor -> times of their messages in the last minute
 _today = {"day": None, "count": 0}
 
@@ -63,6 +68,15 @@ _today = {"day": None, "count": 0}
 def _refuse(body, message, error):
     """Same shape as a normal reply, so the app shows it as a coach message."""
     return {"reply": message, "cards": [], "charts": {}, "options": [], "life_stage": body.life_stage, "error": error}
+
+
+def _visitor(request):
+    """Who to count a message against. Each proxy appends the address it saw to X-Forwarded-For, so only the
+    last PROXY_HOPS entries can be trusted; anything before them was written by the caller."""
+    forwarded = [a.strip() for a in request.headers.get("x-forwarded-for", "").split(",") if a.strip()]
+    if PROXY_HOPS and len(forwarded) >= PROXY_HOPS:
+        return forwarded[-PROXY_HOPS]
+    return request.client.host if request.client else "?"
 
 
 @app.post("/chat")
@@ -73,20 +87,19 @@ def chat(body: ChatIn, request: Request):
     if len(messages[-1]["content"]) > MAX_MESSAGE:
         return _refuse(body, f"That message is too long for this demo. Please keep it under {MAX_MESSAGE} characters.", "too_long")
 
-    # Behind a proxy (Cloud Run) the visitor's address is the first one in X-Forwarded-For.
-    visitor = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "?")).split(",")[0].strip()
-    now, sent = time.monotonic(), _recent[visitor]
-    while sent and now - sent[0] > 60:
-        sent.popleft()
-    if len(sent) >= PER_MINUTE:
-        return _refuse(body, "You're sending messages very quickly. Please wait a moment and try again.", "rate_limited")
-    if _today["day"] != date.today():
-        _today.update(day=date.today(), count=0)
-        _recent.clear()
-    if _today["count"] >= DAILY_LIMIT:
-        return _refuse(body, "This demo has used up its budget for today. Please come back tomorrow.", "daily_limit")
-    sent.append(now)
-    _today["count"] += 1
+    with _lock:
+        if _today["day"] != date.today():  # before reading _recent, so today's first message is counted too
+            _today.update(day=date.today(), count=0)
+            _recent.clear()
+        now, sent = time.monotonic(), _recent[_visitor(request)]
+        while sent and now - sent[0] > 60:
+            sent.popleft()
+        if len(sent) >= PER_MINUTE:
+            return _refuse(body, "You're sending messages very quickly. Please wait a moment and try again.", "rate_limited")
+        if _today["count"] >= DAILY_LIMIT:
+            return _refuse(body, "This demo has used up its budget for today. Please come back tomorrow.", "daily_limit")
+        sent.append(now)
+        _today["count"] += 1
 
     messages = [{"role": m["role"], "content": m["content"][:MAX_HISTORY_TEXT]} for m in messages]
     return coach.chat(body.customer_id, messages, body.life_stage)
