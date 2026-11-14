@@ -1,0 +1,31 @@
+// Dev container for the S-Bank coach: Python 3.14 for the API, Node 22 for the Expo phone app.
+// Open the folder in VS Code and pick "Reopen in Container", or run: devcontainer up --workspace-folder .
+{
+  "name": "sbank-coach",
+  "image": "mcr.microsoft.com/devcontainers/python:3.14-trixie",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+
+  // The host's .venv and node_modules are built for the host, so the container keeps its own in named volumes.
+  "mounts": [
+    "source=sbank-coach-venv,target=${containerWorkspaceFolder}/.venv,type=volume",
+    "source=sbank-coach-node-modules,target=${containerWorkspaceFolder}/mobile/node_modules,type=volume"
+  ],
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  // Published on every host interface (appPort would bind 127.0.0.1 only) so a phone on the same Wi-Fi
+  // can reach the API and Metro for Expo Go.
+  "runArgs": ["-p", "8000:8000", "-p", "8081:8081"],
+  "portsAttributes": {
+    "8000": { "label": "Coach API" },
+    "8081": { "label": "Expo (Metro)" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "expo.vscode-expo-tools"],
+      "settings": { "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python" }
+    }
+  }
+}
