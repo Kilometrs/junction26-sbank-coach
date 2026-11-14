@@ -255,6 +255,110 @@ def what_if_cut(customer_id, category, percent, life_stage=None):
     }
 
 
+def goal_plan(customer_id, amount, months, life_stage=None):
+    """Saving for a goal: how much per month, and whether the safety net should come first."""
+    p = profile(customer_id, life_stage)
+    surplus = p["income_monthly"] - p["mandatory_monthly"] - p["buckets_monthly"]["flexible"]
+    needed = amount / months
+    missing = p["safety_net"]["missing_eur"]
+    shortfall = max(0, needed - surplus)
+    flexible = p["buckets_monthly"]["flexible"]
+
+    if missing > 0:
+        verdict = "safety_net_first"  # fill the safety net, then save for the goal
+    elif shortfall == 0:
+        verdict = "on_track"
+    else:
+        verdict = "tight"  # needs spending cuts or more time
+    return {
+        "amount": amount,
+        "months": months,
+        "verdict": verdict,
+        "needed_monthly": round(needed),
+        "monthly_surplus": round(surplus),
+        "shortfall_monthly": round(shortfall),
+        "cut_flexible_percent_to_close_gap": round(shortfall / flexible * 100) if shortfall and flexible else 0,
+        "months_at_current_surplus": round(amount / surplus, 1) if surplus > 0 else None,
+        "safety_net_missing_eur": missing,
+        "months_to_fill_safety_net_first": round(missing / surplus, 1) if missing and surplus > 0 else (0 if not missing else None),
+    }
+
+
+@lru_cache(maxsize=None)
+def _summary():
+    """Per-customer averages for everyone, written by prep.py. Used to find peers."""
+    with open(DATA / "summary.json") as f:
+        return json.load(f)
+
+
+def compare_to_peers(customer_id, category):
+    """Compare monthly spending in one category with customers of similar age and income."""
+    everyone = _summary()
+    me = everyone[customer_id]
+    peers = [
+        c for cid, c in everyone.items()
+        if cid != customer_id and abs(c["age"] - me["age"]) <= 5 and abs(c["income"] - me["income"]) <= me["income"] * 0.25
+    ]
+    if len(peers) < 20:
+        return {"error": "Too few similar customers for a fair comparison."}
+    values = sorted(c["spend"][category] for c in peers)
+    mine = me["spend"][category]
+    return {
+        "category": category,
+        "you_monthly": mine,
+        "peers_typical_monthly": round(statistics.median(values)),
+        "you_spend_more_than_percent_of_peers": round(sum(v < mine for v in values) / len(values) * 100),
+        "peers": f"{len(peers)} customers aged {me['age'] - 5}-{me['age'] + 5} with a similar income",
+    }
+
+
+def upcoming_bills(customer_id):
+    """Regular payments to expect next month, learned from the last six months."""
+    rows = load(customer_id)
+    months = sorted({r["month"] for r in rows})[-RECENT:]
+    recent = [r for r in rows if r["month"] in months]
+    bills = []
+    for category in ["Housing", "Utilities"]:
+        hits = [r for r in recent if r["category"] == category]
+        if not hits:
+            continue
+        per_month = len(hits) / len(months)
+        bills.append({
+            "what": category,
+            "expected_total": round(-sum(r["amount"] for r in hits) / len(months)),
+            "payments_per_month": round(per_month, 1),
+            "usually_around_day": round(statistics.median(int(r["tx_date"][8:]) for r in hits)) if per_month < 1.5 else None,
+        })
+    salaries = [r for r in recent if r["category"] == "Salary"]
+    salary = {
+        "expected": round(statistics.median(r["amount"] for r in salaries)),
+        "usually_around_day": round(statistics.median(int(r["tx_date"][8:]) for r in salaries)),
+        "arrived_in_months": f"{len({r['month'] for r in salaries})} of the last {len(months)}",
+    } if salaries else None
+    return {"bills": bills, "bills_total": sum(b["expected_total"] for b in bills), "salary": salary}
+
+
+def trend(customer_id, what, months=6):
+    """Month-by-month spending for a category, a bucket (fixed, irregular, flexible) or "all"."""
+    table = _monthly(load(customer_id))
+    key = what.strip().lower()
+    cats = [c for c in BUCKET_OF if key in ("all", c.lower(), BUCKET_OF[c])]
+    if not cats:
+        return {"error": f"Unknown '{what}'.", "options": ["all", *BUCKETS, *BUCKET_OF]}
+    series = {m: round(-sum(table[m].get(c, 0) for c in cats)) for m in list(table)[-months:]}
+    values = list(series.values())
+    half = len(values) // 2
+    earlier, later = statistics.mean(values[:half]), statistics.mean(values[half:])
+    change = round((later - earlier) / earlier * 100) if earlier else None
+    return {
+        "what": what,
+        "by_month": series,
+        "change_percent": change,  # later half of the period vs the earlier half
+        "direction": "flat" if change is None or abs(change) < 10 else ("up" if change > 0 else "down"),
+        "highest_month": max(series, key=series.get),
+    }
+
+
 if __name__ == "__main__":
     cid = sys.argv[1] if len(sys.argv) > 1 else "CUST00001"
     print(json.dumps({

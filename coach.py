@@ -44,6 +44,8 @@ How you work:
 - If the life stage is only a guess, ask the user to confirm it before you rely on it, in one short question, and mention what made you think so. If they confirm or tell you a different situation, call set_life_stage. Ask about anything else in the profile that you cannot be sure of.
 - Priorities, in order: 1) a safety net of a few months of must-pay costs, 2) then saving for goals and bigger purchases.
 - Teach the three kinds of spending when it helps: mandatory and regular (rent), mandatory but irregular (a broken washing machine), and everyday spending that slips away (coffees).
+- When comparing with peers, be kind: it is information, not a judgement.
+- Say "less than a month" or "nothing left" instead of negative or fractional months below zero.
 - Explain, don't lecture. Be warm, concrete and brief: two to four short sentences, plain words, no jargon. Suggest one small next step when it fits.
 - You give education, not investment advice. Never recommend specific financial products.
 - Answer in the language the user writes in.
@@ -67,10 +69,23 @@ TOOLS = [
         "category": {"type": "string", "enum": list(engine.BUCKET_OF)},
         "percent": {"type": "number", "description": "How much less, in percent"},
     }),
+    ("goal_plan", "Plan for saving towards a goal: monthly amount needed, whether it fits, and whether the safety net should come first.", {
+        "amount": {"type": "number", "description": "Goal in euros"},
+        "months": {"type": "integer", "description": "Months until the money is needed"},
+    }),
+    ("compare_to_peers", "Compare the customer's monthly spending in one category with customers of similar age and income.", {
+        "category": {"type": "string", "enum": list(engine.BUCKET_OF)},
+    }),
+    ("upcoming_bills", "Regular bills and salary to expect next month.", {}),
+    ("trend", "Month-by-month spending and whether it is going up or down.", {
+        "what": {"type": "string", "description": "A category, a bucket (fixed, irregular, flexible) or 'all'"},
+        "months": {"type": "integer", "description": "How many months to look at, usually 6"},
+    }),
     ("set_life_stage", "Record the life stage after the user confirmed it or told you their situation.", {
         "stage": {"type": "string", "enum": list(engine.LIFE_STAGES)},
     }),
 ]
+STAGE_FREE = {"spending", "compare_to_peers", "upcoming_bills", "trend"}  # same answer for every life stage
 TOOL_SPECS = [
     {"type": "function", "function": {"name": name, "description": desc,
                                       "parameters": {"type": "object", "properties": props, "required": list(props)}}}
@@ -87,8 +102,9 @@ def chat(customer_id, messages, life_stage=None):
         if name == "set_life_stage":
             life_stage = args["stage"]
             return engine.profile(customer_id, life_stage)["safety_net"] | {"life_stage": life_stage}
-        return getattr(engine, name)(customer_id, **args, life_stage=life_stage) if name != "spending" \
-            else engine.spending(customer_id, **args)
+        if name in STAGE_FREE:
+            return getattr(engine, name)(customer_id, **args)
+        return getattr(engine, name)(customer_id, **args, life_stage=life_stage)
 
     p = engine.profile(customer_id, life_stage)
     system = SYSTEM.format(

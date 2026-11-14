@@ -1,10 +1,11 @@
 """Split the S-Bank dataset into small per-customer files so the app never touches the 346 MB CSV.
 
 Usage:  python prep.py [path/to/Junction-2026-S-pankki]
-Output: data/tx/<customer_id>.csv.gz, data/customers.csv, data/mortgages.csv
+Output: data/tx/<customer_id>.csv.gz, data/customers.csv, data/mortgages.csv, data/summary.json
 """
 import csv
 import gzip
+import json
 import os
 import shutil
 import sys
@@ -43,6 +44,20 @@ def main():
     if out:
         out.close()
     print(f"wrote {n} customer files to {OUT / 'tx'}")
+    write_summary()
+
+
+def write_summary():
+    """Monthly averages for every customer, so the coach can compare someone with their peers."""
+    import engine
+
+    summary = {}
+    for cid in engine._customers():
+        p = engine.profile(cid)
+        summary[cid] = {"age": p["age"], "income": p["income_monthly"], "spend": p["by_category_monthly"]}
+    with open(OUT / "summary.json", "w") as f:
+        json.dump(summary, f)
+    print(f"wrote summary of {len(summary)} customers")
 
 
 if __name__ == "__main__":
