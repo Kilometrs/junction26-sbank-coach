@@ -12,3 +12,18 @@ A finance coach that understands **where you are in life** (student, moving out,
 
 ## Data
 Uses S-Bank's synthetic dataset, which is not included in this repo. Clone `hackjunction/Junction-2026-S-pankki` next to this repo and set `SBANK_DATA_DIR` in `.env` (see `.env.example`).
+
+## Run
+```bash
+python prep.py              # once: splits the dataset into data/tx/<customer>.csv.gz
+python engine.py CUST00152  # prints the profile and example answers for one customer
+```
+
+## Demo customers
+| Customer | Who | "Can I afford a €600 laptop?" |
+|---|---|---|
+| `CUST00152` | 21, income ~€1,500, half a month of safety net | wait |
+| `CUST00001` | 63, stable, 2.8 months of safety net | yes, but it dips into the safety net |
+| `CUST00007` | 49, stable, 10 months of safety net | yes |
+| `CUST05014` | 23, irregular income, 0.4 months of safety net | wait |
+| `CUST00243` | 52, housing cost doubled (moved), 0.6 months | wait |
