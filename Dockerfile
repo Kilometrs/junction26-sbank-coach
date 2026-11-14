@@ -12,6 +12,9 @@ COPY mobile/ ./
 # The app calls the address it was loaded from, because the API below serves it.
 ENV EXPO_PUBLIC_API_URL=same-origin CI=1
 RUN npx expo export --platform web --output-dir dist
+# On phones, let the keyboard shrink the page instead of covering it. The check fails the build if Expo's HTML changes.
+RUN sed -i 's/shrink-to-fit=no/shrink-to-fit=no, interactive-widget=resizes-content/' dist/index.html \
+ && grep -q 'interactive-widget=resizes-content' dist/index.html
 
 # 2. The API, which also serves that website at /.
 FROM docker.io/library/python:3.14-slim

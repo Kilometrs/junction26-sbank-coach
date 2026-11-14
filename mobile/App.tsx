@@ -16,33 +16,19 @@ import { colors, eur, font, PHONE_MAX_WIDTH } from './src/theme';
 
 type Screen = 'customers' | 'chat' | 'profile';
 
-// In a phone browser the address bar and the keyboard cover part of the page, and "100% high" still counts the
-// covered part: the message box ends up underneath, and the browser pans the whole page to show it.
-// So the app is pinned to exactly the part that is visible, and follows it when the keyboard opens or closes.
+// In a phone browser the address bar and the keyboard cover part of the page, and "100% high" can still count the
+// covered part. The browser itself knows what is visible: "100dvh" is the height of the page with its bars as they
+// are right now, and interactive-widget=resizes-content makes the keyboard shrink the page instead of covering it.
+// (Measuring the screen in JavaScript and setting heights by hand went stale in Firefox for Android.)
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
-  // Ask the browser to shrink the page for the keyboard instead of covering it (Chrome 108+, Firefox 132+).
+  // The hosted build already has this in its HTML (see the Dockerfile); this is for the development server.
   const meta = document.querySelector('meta[name="viewport"]');
   const content = meta?.getAttribute('content') ?? '';
   if (meta && !content.includes('interactive-widget')) meta.setAttribute('content', `${content}, interactive-widget=resizes-content`);
 
-  const root = document.getElementById('root');
-  const visible = window.visualViewport;
-  const fit = () => {
-    if (!root) return;
-    // For browsers that cover the page anyway: pin the app to the visible rectangle, wherever the browser panned it.
-    Object.assign(root.style, {
-      position: 'fixed',
-      left: '0',
-      right: '0',
-      top: `${visible?.offsetTop ?? 0}px`,
-      height: `${visible?.height ?? window.innerHeight}px`,
-    });
-  };
-  document.documentElement.style.overflow = 'hidden';
-  fit();
-  visible?.addEventListener('resize', fit);
-  visible?.addEventListener('scroll', fit);
-  window.addEventListener('resize', fit);
+  const style = document.createElement('style');
+  style.textContent = 'html, body, #root { height: 100dvh !important; }';
+  document.head.appendChild(style);
 }
 
 export default function App() {
