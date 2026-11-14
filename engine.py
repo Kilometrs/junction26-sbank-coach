@@ -2,7 +2,9 @@
 
 Try it:  python engine.py CUST00001
 """
+import calendar
 import csv
+import datetime
 import gzip
 import json
 import statistics
@@ -244,6 +246,7 @@ def safe_to_spend(customer_id, life_stage=None):
     rows = load(customer_id)
     this_month = rows[-1]["month"]
     spent = -sum(r["amount"] for r in rows if r["month"] == this_month and BUCKET_OF.get(r["category"]) == "flexible")
+    payday = upcoming_bills(customer_id)["salary"] or {}
     return {
         "month": this_month,
         "flexible_budget": round(budget),
@@ -251,6 +254,9 @@ def safe_to_spend(customer_id, life_stage=None):
         "spent_so_far": round(spent),
         "left": round(budget - spent),
         "usual_flexible_spend": p["buckets_monthly"]["flexible"],
+        # From the (simulated) payslip, so the coach can say how long the money has to last. None without a salary.
+        "next_payday": payday.get("next_payday"),
+        "days_until_payday": payday.get("days_until_payday"),
     }
 
 
@@ -368,9 +374,24 @@ def compare_to_peers(customer_id, category):
     }
 
 
+def _next_on_day(as_of, day):
+    """The next date after as_of (an ISO date) that falls on this day of the month, and how many days away it is."""
+    today = datetime.date.fromisoformat(as_of)
+    year, month = today.year, today.month
+    while True:
+        date = datetime.date(year, month, min(day, calendar.monthrange(year, month)[1]))
+        if date > today:
+            return date.isoformat(), (date - today).days
+        year, month = (year, month + 1) if month < 12 else (year + 1, 1)
+
+
 def upcoming_bills(customer_id):
-    """Regular payments to expect next month, learned from the last six months."""
+    """Regular payments to expect next month, learned from the last six months.
+
+    In S-mobiili these would come from the customer's e-invoices and payslip. The demo has no such feed, so the
+    same facts are worked out from the transactions and the app labels them as simulated."""
     rows = load(customer_id)
+    as_of = rows[-1]["tx_date"]
     months = sorted({r["month"] for r in rows})[-RECENT:]
     recent = [r for r in rows if r["month"] in months]
     bills = []
@@ -379,20 +400,34 @@ def upcoming_bills(customer_id):
         if not hits:
             continue
         per_month = len(hits) / len(months)
+        day = round(statistics.median(int(r["tx_date"][8:]) for r in hits)) if per_month < 1.5 else None
+        due, days = _next_on_day(as_of, day) if day else (None, None)
         bills.append({
             "what": category,
             "expected_total": round(-sum(r["amount"] for r in hits) / len(months)),
+            "expected_total_is": "per month, all payments together",
             "payments_per_month": round(per_month, 1),
-            "usually_around_day": round(statistics.median(int(r["tx_date"][8:]) for r in hits)) if per_month < 1.5 else None,
+            "usually_around_day": day,
+            "e_invoice": True,  # simulated: how S-mobiili would know about this bill
+            "next_due": due,  # None when the bill comes several times a month
+            "days_until_due": days,
         })
     salaries = [r for r in recent if r["category"] == "Salary"]
-    salary = {
-        "expected": round(statistics.median(r["amount"] for r in salaries)),
-        "usually_around_day": round(statistics.median(int(r["tx_date"][8:]) for r in salaries)),
-        "arrived_in_months": f"{len({r['month'] for r in salaries})} of the last {len(months)}",
-    } if salaries else None
+    salary = None
+    if salaries:
+        day = round(statistics.median(int(r["tx_date"][8:]) for r in salaries))
+        payday, days = _next_on_day(as_of, day)
+        salary = {
+            "expected": round(statistics.median(r["amount"] for r in salaries)),
+            "usually_around_day": day,
+            "arrived_in_months": f"{len({r['month'] for r in salaries})} of the last {len(months)}",
+            "payslip": True,  # simulated: how S-mobiili would know the payday
+            "next_payday": payday,
+            "days_until_payday": days,
+            "missing_last_two_months": not any(r["month"] in months[-2:] for r in salaries),
+        }
     bills.sort(key=lambda b: -b["expected_total"])  # largest first
-    return {"bills": bills, "bills_total": sum(b["expected_total"] for b in bills), "salary": salary}
+    return {"as_of": as_of, "bills": bills, "bills_total": sum(b["expected_total"] for b in bills), "salary": salary}
 
 
 def trend(customer_id, what, months=6):

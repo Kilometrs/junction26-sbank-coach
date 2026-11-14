@@ -29,6 +29,11 @@ export type Profile = {
   life_stage_signals: Signal[];
   safety_net: { months_now: number | null; target_months: number; target_eur: number; missing_eur: number };
   safe_to_spend: SafeToSpend;
+  /** What S-mobiili would know from e-invoices and the payslip. Simulated: worked out from the transactions. */
+  s_mobiili: {
+    bills: { what: string; expected_total: number; payments_per_month: number; next_due: string | null; days_until_due: number | null }[];
+    salary: { expected: number; usually_around_day: number; next_payday: string; days_until_payday: number; missing_last_two_months: boolean } | null;
+  };
   persona_text: string;
   /** One ready-made observation from the engine, shown when the chat opens. */
   insight: string;

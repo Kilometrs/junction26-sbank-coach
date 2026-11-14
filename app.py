@@ -56,7 +56,7 @@ def profile(customer_id: str, life_stage: str | None = None):
     _demo_customer(customer_id)
     p = engine.profile(customer_id, life_stage)
     return p | {"safe_to_spend": engine.safe_to_spend(customer_id, life_stage), "persona_text": engine.persona_text(p),
-                "insight": engine.insight(customer_id)["text"]}
+                "insight": engine.insight(customer_id)["text"], "s_mobiili": engine.upcoming_bills(customer_id)}
 
 
 # Limits that keep a public demo from burning the language-model budget. All can be changed in .env.

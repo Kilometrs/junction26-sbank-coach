@@ -89,6 +89,39 @@ export function ProfileScreen(p: Props) {
           </View>
         )}
 
+        {profile ? (
+          <>
+            <Text style={s.section}>From S-mobiili · simulated</Text>
+            <View style={s.group}>
+              {profile.s_mobiili.salary ? (
+                <Fact
+                  label="Payslip"
+                  value={
+                    profile.s_mobiili.salary.missing_last_two_months
+                      ? `No salary in the last two months. It used to be about ${eur(profile.s_mobiili.salary.expected)}.`
+                      : `About ${eur(profile.s_mobiili.salary.expected)}, next payday ${day(profile.s_mobiili.salary.next_payday)} (in ${profile.s_mobiili.salary.days_until_payday} days)`
+                  }
+                  tag={['guess', 'Simulated payslip']}
+                  last={profile.s_mobiili.bills.length === 0}
+                />
+              ) : null}
+              {profile.s_mobiili.bills.map((b, i) => (
+                <Fact
+                  key={b.what}
+                  label={`E-invoice · ${b.what}`}
+                  value={
+                    b.next_due
+                      ? `About ${eur(b.expected_total)}, due around ${day(b.next_due)} (in ${b.days_until_due} days)`
+                      : `About ${eur(b.expected_total)} a month, in about ${Math.round(b.payments_per_month)} invoices`
+                  }
+                  tag={['guess', 'Simulated e-invoice']}
+                  last={i === profile.s_mobiili.bills.length - 1}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
+
         <Text style={s.section}>Privacy</Text>
         <View style={s.group}>
           <View style={[s.toggleRow, s.line]}>
@@ -126,6 +159,10 @@ export function ProfileScreen(p: Props) {
     </View>
   );
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2026-10-22" reads as "22 Oct". */
+const day = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]}`;
 
 function Fact({ label, value, tag, onEdit, last }: { label: string; value: string; tag: [TagKind, string]; onEdit?: () => void; last?: boolean }) {
   return (
