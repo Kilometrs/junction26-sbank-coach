@@ -125,7 +125,10 @@ export function ChatScreen({ profile, lifeStages, stageSource, messages, busy, o
           placeholder="Ask about your money…"
           placeholderTextColor={colors.muted}
           returnKeyType="send"
-          style={[font(15), s.input]}
+          // The keyboard takes half the screen: once it is up, show the latest message again.
+          onFocus={() => setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 300)}
+          // 16px on the web: iPhones zoom the whole page into any smaller text box.
+          style={[font(Platform.OS === 'web' ? 16 : 15), s.input]}
         />
         <IconButton label="Send" onPress={() => send(text)} style={[s.send, (!text.trim() || busy) && { opacity: 0.5 }]}>
           <Send />

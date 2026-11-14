@@ -17,17 +17,31 @@ import { colors, eur, font, PHONE_MAX_WIDTH } from './src/theme';
 type Screen = 'customers' | 'chat' | 'profile';
 
 // In a phone browser the address bar and the keyboard cover part of the page, and "100% high" still counts the
-// covered part. Keep the app exactly as tall as what is visible, so the message box never ends up underneath.
+// covered part: the message box ends up underneath, and the browser pans the whole page to show it.
+// So the app is pinned to exactly the part that is visible, and follows it when the keyboard opens or closes.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  // Ask the browser to shrink the page for the keyboard instead of covering it (Chrome 108+, Firefox 132+).
+  const meta = document.querySelector('meta[name="viewport"]');
+  const content = meta?.getAttribute('content') ?? '';
+  if (meta && !content.includes('interactive-widget')) meta.setAttribute('content', `${content}, interactive-widget=resizes-content`);
+
+  const root = document.getElementById('root');
+  const visible = window.visualViewport;
   const fit = () => {
-    const height = `${window.visualViewport?.height ?? window.innerHeight}px`;
-    for (const el of [document.documentElement, document.body, document.getElementById('root')]) {
-      if (el) el.style.height = height;
-    }
-    window.scrollTo(0, 0);
+    if (!root) return;
+    // For browsers that cover the page anyway: pin the app to the visible rectangle, wherever the browser panned it.
+    Object.assign(root.style, {
+      position: 'fixed',
+      left: '0',
+      right: '0',
+      top: `${visible?.offsetTop ?? 0}px`,
+      height: `${visible?.height ?? window.innerHeight}px`,
+    });
   };
+  document.documentElement.style.overflow = 'hidden';
   fit();
-  window.visualViewport?.addEventListener('resize', fit);
+  visible?.addEventListener('resize', fit);
+  visible?.addEventListener('scroll', fit);
   window.addEventListener('resize', fit);
 }
 
