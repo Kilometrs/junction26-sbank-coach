@@ -29,6 +29,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState(false);
   const [sentSheet, setSentSheet] = useState(false);
+  const [dataNote, setDataNote] = useState(true); // shown once, when the app opens
 
   // What we send as life_stage: the user's choice, or nothing (engine guesses), or a neutral default when detection is off.
   const stage = userStage ?? (detection ? null : 'stable');
@@ -169,6 +170,19 @@ export default function App() {
         <View style={s.sent}>
           <Text style={[font(13), { lineHeight: 20 }]}>{profile?.persona_text ?? 'Loading…'}</Text>
         </View>
+      </Sheet>
+
+      <Sheet visible={dataNote} title="This is demo data" onClose={() => setDataNote(false)}>
+        <Text style={[font(14), { lineHeight: 21 }]}>
+          The customers in this demo are synthetic: made-up people from S-Bank's hackathon dataset, not real accounts.
+        </Text>
+        <Text style={[font(14), { lineHeight: 21 }]}>
+          Some of their numbers are unrealistic, for example thousands of euros a month on entertainment or a month with no grocery
+          spending. The coach reports what the data says, so an odd answer usually means odd data.
+        </Text>
+        <Text style={[font(13, 400, colors.muted), { lineHeight: 19 }]}>
+          The calculations and the coaching logic are real and would work the same on real accounts.
+        </Text>
       </Sheet>
     </SafeAreaProvider>
   );
