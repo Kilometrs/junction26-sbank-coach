@@ -143,12 +143,20 @@ def profile(customer_id, life_stage=None):
         "saving_monthly": round(_avg(table, recent, SAVING)),
         "buckets_monthly": buckets,
         "by_category_monthly": by_category,
+        # The same categories grouped by kind of spending, largest first, each group with its own total,
+        # so nobody has to guess which category belongs where or add anything up.
+        "by_bucket_monthly": {
+            b: {"total": buckets[b], "categories": dict(sorted(((c, by_category[c]) for c in cats), key=lambda kv: -kv[1]))}
+            for b, cats in BUCKETS.items()
+        },
+        "all_spending_monthly": sum(buckets.values()),
         "mandatory_monthly": mandatory,
         "life_stage": stage,
         "life_stage_confirmed": life_stage is not None,
         "life_stage_signals": signals,
         "safety_net": {
             "months_now": round(balance / mandatory, 1) if mandatory else None,
+            "percent_of_target": round(balance / target * 100) if target else None,
             "target_months": target_months,
             "target_eur": round(target),
             "missing_eur": round(max(0, target - balance)),
@@ -162,7 +170,7 @@ def persona_text(p):
     lines = [
         f"Age {p['age']}. Income about €{p['income_monthly']} a month (lowest month in the past year: €{p['income_lowest_month']}).",
         f"Monthly spending: €{b['fixed']} mandatory and regular, €{b['irregular']} mandatory but irregular, €{b['flexible']} everyday spending that slips away.",
-        f"Account balance €{p['balance']}, which covers {net['months_now']} months of must-pay costs. Target for this life stage: {net['target_months']} months (€{net['target_eur']}).",
+        f"Account balance €{p['balance']}, which is {net['percent_of_target']}% of the safety-net target for this life stage: {net['target_months']} months of must-pay costs (€{net['target_eur']}).",
         f"Already puts aside about €{p['saving_monthly']} a month." if p["saving_monthly"] else "No regular saving visible.",
         f"Life stage: {LIFE_STAGES[p['life_stage']]['label']} ({'confirmed by the user' if p['life_stage_confirmed'] else 'a guess, NOT yet confirmed by the user'}).",
     ]
@@ -184,12 +192,16 @@ def spending(customer_id, what, months=1):
     if not hits:
         return {"error": f"Nothing found for '{what}'.", "categories": list(BUCKET_OF), "merchant_types": sorted(set(MCC.values()))}
     in_period = [r for r in hits if r["month"] in period]
+    # "Usual" is the same window the profile uses, so the two never disagree about what a normal month is.
+    usual_months = all_months[-RECENT:]
+    usual = -sum(r["amount"] for r in hits if r["month"] in usual_months) / len(usual_months)
     return {
         "what": what,
         "period": f"{min(period)} to {max(period)}",
         "total": round(-sum(r["amount"] for r in in_period)),
         "purchases": len(in_period),
-        "usual_per_month": round(-sum(r["amount"] for r in hits) / len(all_months)),
+        "usual_per_month": round(usual),
+        "usual_is": f"average of the last {len(usual_months)} months, the same as in the profile",
         "bucket": BUCKET_OF.get(hits[0]["category"]),
     }
 
@@ -232,8 +244,13 @@ def can_i_afford(customer_id, amount, life_stage=None):
     return {
         "amount": amount,
         "verdict": verdict,
-        "months_before": net["months_now"],
-        "months_after": round(after / mandatory, 1) if mandatory else None,
+        # The same effect in euros, for the chart: what is there today, what is left, and the target.
+        "balance_before": p["balance"],
+        "balance_after": round(after),
+        "target_eur": net["target_eur"],
+        # How full the safety net is, before and after: easier to picture than "0.3 months".
+        "percent_of_target_before": net["percent_of_target"],
+        "percent_of_target_after": max(0, round(after / net["target_eur"] * 100)) if net["target_eur"] else None,
         "target_months": net["target_months"],
         "monthly_surplus": round(monthly_surplus),
         "months_to_save_up": round(amount / monthly_surplus, 1) if monthly_surplus > 0 else None,
@@ -344,6 +361,7 @@ def upcoming_bills(customer_id):
         "usually_around_day": round(statistics.median(int(r["tx_date"][8:]) for r in salaries)),
         "arrived_in_months": f"{len({r['month'] for r in salaries})} of the last {len(months)}",
     } if salaries else None
+    bills.sort(key=lambda b: -b["expected_total"])  # largest first
     return {"bills": bills, "bills_total": sum(b["expected_total"] for b in bills), "salary": salary}
 
 

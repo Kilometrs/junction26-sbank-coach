@@ -35,6 +35,9 @@ CHART_TOOLS = [
     ("progress", "Progress bars towards a target.", {
         **_COMMON, "unit": _UNIT, "bars": _ARR(_LABELLED), "target": _LABELLED, "badge": _TEXT,
     }, ["title", "unit", "bars"]),
+    ("before_after", "One bar showing what a one-off cost takes out of an amount: before, the change, what is left, and a target.", {
+        **_COMMON, "unit": _UNIT, "before": _LABELLED, "change": _LABELLED, "after": _LABELLED, "target": _LABELLED, "badge": _TEXT,
+    }, ["title", "unit", "before", "change", "after"]),
     ("key_figures", "A few key numbers: an optional headline and rows. sign shows +€ or −€.", {
         **_COMMON, "badge": _TEXT,
         "headline": _OBJ(["label", "value", "unit"], label=_TEXT, value=_NUM, unit=_UNIT),
@@ -50,18 +53,19 @@ CHART_SPECS = [
 ]
 
 PROMPT = """Charts:
-- You can draw a chart inside your reply with bar_chart, line_chart, progress or key_figures, once you have the numbers. Charts are numbered c1, c2… in the order you draw them in this answer. To save time, draw the charts and write your whole answer in the same step, with [[chart:c1]] on a line of its own right after the sentence it belongs to.
+- You can draw a chart inside your reply with bar_chart, line_chart, progress, before_after or key_figures, once you have the numbers. Charts are numbered c1, c2… in the order you draw them in this answer. To save time, draw the charts and write your whole answer in the same step, with [[chart:c1]] on a line of its own right after the sentence it belongs to.
 - Every value in a chart must be a number a tool returned while answering this message, copied exactly. Never calculate, round or combine numbers for a chart: if you need a number, call a tool. A chart call with other numbers is rejected; then fix it or leave the chart out.
 - Good charts for each tool:
   - safe_to_spend: key_figures, headline = left, rows = flexible_budget, safety_net_contribution and spent_so_far.
-  - can_i_afford: progress in months, bars = months_before and months_after, target = target_months.
+  - can_i_afford: before_after in eur, before = balance_before, change = amount (label it with what is bought), after = balance_after, target = target_eur. Put the months in the target label, for example "Student target (2 months of must-pay costs)". In your sentence, say the euros the chart shows, and the months only once.
   - what_if_cut: line_chart with x_unit months, a line from (0, 0) to (months_to_target_after, missing_eur), the current pace dashed from (0, 0) to (months_to_target_now, missing_eur) when it is not null, reference = missing_eur.
   - goal_plan: when the safety net comes first, a stacked bar_chart in months with one category and two series, months_to_fill_safety_net_first and months_at_current_surplus; otherwise key_figures with needed_monthly and monthly_surplus.
   - upcoming_bills: key_figures, one row per bill with sign minus, the salary with sign plus.
   - trend: bar_chart with one bar per month, highlight = highest_month.
   - compare_to_peers: bar_chart with two categories, the customer and a typical peer; put who the peers are in note.
   - spending: key_figures with total and usual_per_month.
-- Write titles and labels in the user's language. Draw a chart when your answer rests on a tool result, at most two per answer, and let your sentence point at the chart instead of repeating all of its numbers."""
+  - profile, when the user asks where their money goes or for a list of their spending: bar_chart in eur with one bar per kind of spending (the three totals in by_bucket_monthly), highlight = the largest, placed before the list of categories.
+- Write titles and labels in the same language as your reply. Draw a chart when your answer rests on a tool result, at most two per answer, and let your sentence point at the chart instead of repeating all of its numbers."""
 
 
 def _num_key(v):
@@ -195,6 +199,18 @@ def validate_chart(kind, spec, data_numbers, text_numbers):
         if tgt:
             out["target"] = {"label": str(tgt.get("label", "")), "value": value(tgt.get("value"), "target")}
             texts.append(out["target"]["label"])
+
+    elif kind == "before_after":
+        out["unit"] = unit(spec.get("unit"))
+        for key in ("before", "change", "after", "target"):
+            part = spec.get(key)
+            if not part and key == "target":
+                continue
+            _need(isinstance(part, dict), f"before_after needs {key} with a label and a value.")
+            out[key] = {"label": str(part.get("label", "")), "value": value(part.get("value"), key)}
+            texts.append(out[key]["label"])
+        _need(abs(out["after"]["value"]) <= abs(out["before"]["value"]) or out["after"]["value"] < 0,
+              "after must be what is left of before once the change is taken out.")
 
     elif kind == "key_figures":
         rows = spec.get("rows") or []

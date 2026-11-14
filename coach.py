@@ -8,6 +8,7 @@ Chat in the terminal:  python coach.py CUST00152
 """
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +20,7 @@ import engine
 
 load_dotenv(Path(__file__).parent / ".env")
 MODELS = os.environ.get("LLM_MODEL", "gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite").split(",")
+MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", 1500))  # per model call: room for an answer with two charts, no more
 client = OpenAI(
     api_key=os.environ.get("LLM_API_KEY") or os.environ.get("GEMINI_API_KEY"),
     base_url=os.environ.get("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
@@ -35,7 +37,7 @@ def _complete(convo, answer_now=False):
     answer_now: no more tool calls, the model has to write its reply."""
     for model in list(MODELS):
         try:
-            return client.chat.completions.create(model=model.strip(), messages=convo, tools=TOOL_SPECS,
+            return client.chat.completions.create(model=model.strip(), messages=convo, tools=TOOL_SPECS, max_tokens=MAX_TOKENS,
                                                   tool_choice="none" if answer_now else "auto").choices[0].message
         except APIError as e:
             print(f"[coach] {model}: {type(e).__name__}", file=sys.stderr)
@@ -50,19 +52,23 @@ How you work:
 - If the life stage is only a guess, confirm it once: when the question depends on it (affording something, goals, the safety net), add one short question at the end and mention what made you think so. Do not ask again if you already asked in this conversation, and do not ask on simple lookups like "how much did I spend on X".
 - If the user confirms or tells you a different situation, call set_life_stage. Ask about anything else in the profile that you cannot be sure of.
 - If the user lost their job, their income figures are out of date: talk about the balance as a runway (how many months of must-pay costs it covers) and do not promise any monthly surplus.
+- Monthly figures in the profile are averages of the last 6 months; one month alone can be much higher or lower. When you give a number, say what it covers ("on average", "in September"). If two figures differ, they cover different periods: explain that, and never say an earlier figure was wrong unless a tool result shows it was.
+- Your earlier replies in this conversation were built on tool results that are no longer shown to you. Treat their figures as checked: do not apologise for them or "correct" them. Just call the tools again for what you need now.
 - Priorities, in order: 1) a safety net of a few months of must-pay costs, 2) then saving for goals and bigger purchases.
 - Teach the three kinds of spending when it helps: mandatory and regular (rent), mandatory but irregular (a broken washing machine), and everyday spending that slips away (coffees).
 - When comparing with peers, be kind: it is information, not a judgement.
-- Say "less than a month" or "nothing left" instead of negative or fractional months below zero.
+- Say how full the safety net is as a percentage of its target ("your safety net is at 26% of its target") or in euros. Never use fractions of a month like "0.3 months" or "0.5 months"; for a runway say whole months, or "less than a month". Never give negative months.
 - Explain, don't lecture. Be warm, concrete and brief: two to four short sentences, plain words, no jargon. Suggest one small next step when it fits.
+- The app shows your reply as plain text. You may put **bold** around the one key figure or verdict. When you list several items (categories, bills, options), put each on its own line starting with "- ", with the name first and the amount after it, and put the total on its own line; never run a list together in one sentence. Use no other Markdown (no headings, no tables). List amounts from largest to smallest (tools return them in that order; months stay in time order). The profile tool's by_bucket_monthly gives the categories of each kind of spending (fixed, irregular, flexible) with that group's total: use those totals as they are and never put a total next to a group it does not belong to. mandatory_monthly is fixed plus irregular together.
 - You give education, not investment advice. Never recommend specific financial products.
-- Answer in the language the user writes in.
+- When you talk to the user, call it their "situation" ("your situation", "in your situation"), never their "life stage" or "stage".
+- Answer in the language the user writes in. That language goes for everything you produce: your reply, chart titles and labels, and answer buttons. S-Bank is Finnish, but do not use Finnish unless the user wrote in Finnish.
 
 {charts}
 
 Questions with answer buttons:
-- When you ask the user something with a few clear answers (yes or no, confirming a life-stage guess, picking one of a few options), call ask_with_options with 2 to 4 short answers. Write them in the user's language, the way the user would say them, for example "Yes, I'm a student" and "No, something else".
-- The app shows them as buttons under your reply, and the user can still type something else. End your reply with the question itself, and ask at most one such question per reply. Call it in the same step as your charts.
+- When you ask the user something with a few clear answers (yes or no, confirming a life-stage guess, picking one of a few options), call ask_with_options with 2 to 4 short answers. Write them in the same language as your reply (the language of the user's last message), the way the user would say them: for an English question, for example "Yes, I'm a student" and "No, something else".
+- The app shows them as buttons under your reply, and the user can still type something else. End your reply with the question itself, and ask at most one such question per reply. Call it in the same step as your charts. It is a tool call: never write its name or [[...]] for it in your reply.
 
 Life stages you can set: {stages}
 
@@ -112,7 +118,7 @@ TOOL_SPECS.append({"type": "function", "function": {
     "description": "Show the user buttons with answers to the question you end your reply with, for example yes and no.",
     "parameters": {"type": "object", "properties": {"options": {
         "type": "array", "items": {"type": "string"},
-        "description": "2 to 4 short answers in the user's language, written as the user would say them",
+        "description": "2 to 4 short answers in the same language as your reply, written as the user would say them",
     }}, "required": ["options"]},
 }})
 
@@ -130,6 +136,14 @@ def answer_options(args):
     if too_long := [o for o in options if len(o) > 40]:
         raise ValueError(f"Keep each answer under 40 characters: {too_long}")
     return options
+
+
+_STRAY_TAG = re.compile(r"\[\[(?!chart:)[^\]\n]*\]\]")
+
+
+def finish(reply, drawn):
+    """The reply as the app shows it: no leftover [[tags]], and its chart markers tidied."""
+    return charts.place_charts(_STRAY_TAG.sub("", reply or ""), drawn)
 
 
 HISTORY = 10  # messages sent to the model; older ones are left out to keep each call small
@@ -195,7 +209,7 @@ def chat(customer_id, messages, life_stage=None):
             reply = msg.content or ""
             if not charts.MARKER.sub("", reply).strip():  # the answer came with the tool calls, only markers at the end
                 reply = "\n\n".join(t for t in [*said, reply] if t.strip())
-            return {"reply": charts.place_charts(reply, drawn), "cards": cards, "charts": drawn, "options": options,
+            return {"reply": finish(reply, drawn), "cards": cards, "charts": drawn, "options": options,
                     "life_stage": life_stage}
         if msg.content and msg.content.strip():
             said.append(msg.content)
@@ -223,7 +237,7 @@ def chat(customer_id, messages, life_stage=None):
         # The answer came together with its charts and question, and they were all accepted: done, no extra call.
         text = msg.content or ""
         if not needs_data and charts.MARKER.sub("", text).strip():
-            return {"reply": charts.place_charts(text, drawn), "cards": cards, "charts": drawn, "options": options,
+            return {"reply": finish(text, drawn), "cards": cards, "charts": drawn, "options": options,
                     "life_stage": life_stage}
     return {"reply": "Sorry, I got stuck on that one. Could you ask it another way?", "cards": cards, "charts": {}, "options": [],
             "life_stage": life_stage}
