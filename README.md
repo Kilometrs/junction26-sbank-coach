@@ -23,13 +23,36 @@ cp .env.example .env                  # then add your API key
 .venv/bin/uvicorn app:app --reload    # API + debug page on http://localhost:8000
 ```
 
+## Dev container
+`.devcontainer/` sets up everything: Python 3.14 with the API's packages in `.venv`, and Node 22 with the phone app's packages. Open the folder in VS Code and choose **Reopen in Container**, or use the CLI:
+```bash
+npx @devcontainers/cli up --workspace-folder .
+```
+- Inside the container, `.venv` and `mobile/node_modules` are Docker volumes. They don't touch the host's copies.
+- `data/` and `.env` come from the project folder, so prepare the data and add your key as described above.
+- Ports 8000 (API) and 8081 (Expo) are published on all of the host's network interfaces. Run the servers with `--host 0.0.0.0`.
+- For Expo Go on a phone, set `REACT_NATIVE_PACKAGER_HOSTNAME=<laptop LAN IP>` and `EXPO_PUBLIC_API_URL=http://<laptop LAN IP>:8000` before `npx expo start`.
+
+## Phone UI (React Native, `mobile/`)
+Expo SDK 58 app built from the Claude Design mockup "Personal Economic Trainer – chatbot mockup": the coach chat with charts drawn inside its replies, and "Your money profile" (life-stage check, what the coach knows, privacy).
+```bash
+cd mobile && npm install
+npx expo start --web                  # browser, talks to http://localhost:8000
+npx expo start                        # Expo Go on a phone: see below
+```
+Start the API with `--host 0.0.0.0`. A real phone needs `EXPO_PUBLIC_API_URL=http://<laptop LAN IP>:8000 npx expo start`; the Android emulator uses `10.0.2.2` automatically.
+No Node on the machine? `.claude/launch.json` runs Expo inside the `node:22` Docker image.
+
 ## API (for the UI)
 | Endpoint | Returns |
 |---|---|
 | `GET /customers` | Demo customers: `[{id, label}]` |
 | `GET /life-stages` | Life stages with label and safety-net target |
 | `GET /profile/{id}?life_stage=` | Numbers for the cards: buckets, safety net, safe-to-spend, written profile |
-| `POST /chat` | Body `{customer_id, messages, life_stage}`. Returns `{reply, cards, life_stage}`. `cards` are the raw engine results behind the reply, so the UI can draw numbers without parsing text. Send `life_stage` back on the next call. |
+| `POST /chat` | Body `{customer_id, messages, life_stage}`. Returns `{reply, cards, charts, options, life_stage}`. `cards` are the raw engine results behind the reply (`{tool, args, result}`). `charts` are the charts the coach drew, by id; the reply has a `[[chart:<id>]]` line where each one goes. `options` are 2–4 answers to the question the reply ends with (the coach sets them with its `ask_with_options` tool, for example "Yes, I'm a student" / "No, something else"); the app shows them as buttons, and tapping one sends it as the user's message. Empty when there is no such question. Send `life_stage` back on the next call, and strip the markers from the history you send (only the last 10 messages reach the model). If the language model fails, the reply also has `error`. |
+
+### Charts
+The coach draws with four chart tools (`charts.py`): `bar_chart`, `line_chart`, `progress` and `key_figures`. It picks the type, writes the title and labels in the user's language, and fills in the values. The backend accepts a chart only if every number in it is one the engine returned while answering this message (or is in the customer's profile); numbers in titles and labels may also come from the tool arguments, like the 20 in "Restaurants −20%". Anything else is sent back to the model as an error, so a chart can never show a made-up or recalculated number. The app (`mobile/src/components/Visuals.tsx`) only formats and draws.
 
 ## Demo customers
 | Customer | Who | "Can I afford a €600 laptop?" |
